@@ -1,0 +1,46 @@
+{
+  "updated": "2026-10-28",
+  "sources": {
+    "ada": "https://github.com/JustAResearcher/gpu-unlock-ada/issues/",
+    "nvuefi": "https://github.com/physicsdolphin/nv-uefi-unlocker/issues/"
+  },
+  "status_meaning": {
+    "working": "unlocked on Windows with the generic nv-uefi-unlocker loader, matched results reported",
+    "port-only": "unlocked on Windows only with a per-board port; the generic loader has no report yet",
+    "untested": "no Windows report yet; the chip family is routed, so a careful replay-first test is reasonable",
+    "partial": "the transaction completes but the speed-up is lost or missing on some boards",
+    "not-needed": "already runs at full rate, nothing to unlock",
+    "no": "not possible with this method"
+  },
+  "devices": {
+    "2684": {"name": "RTX 4090", "chip": "AD102", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "Per-board UEFI port on an MSI Z790 GODLIKE worked.", "refs": ["ada#43", "ada#108", "ada#111"]},
+    "2685": {"name": "RTX 4090 D", "chip": "AD102", "form": "desktop", "linux": "working", "windows": "untested", "notes": "Linux runs show TF32 GEMM gains; BF16 large GEMMs can stay flat.", "refs": ["ada#90"]},
+    "2689": {"name": "RTX 4070 Ti SUPER (AD102)", "chip": "AD102", "form": "desktop", "linux": "working", "windows": "untested", "notes": "", "refs": ["ada#3"]},
+    "2702": {"name": "RTX 4080 SUPER", "chip": "AD103", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "TOTORONG-lineage UEFI ports worked on two boards.", "refs": ["ada#53", "ada#70", "ada#100"]},
+    "2704": {"name": "RTX 4080", "chip": "AD103", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "TOTORONG AD103_win_unlocker reference card.", "refs": ["ada#48"]},
+    "2705": {"name": "RTX 4070 Ti SUPER", "chip": "AD103", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "Per-board port worked on a second VBIOS; ComfyUI A/B +5.3%.", "refs": ["ada#39", "ada#92", "ada#112"]},
+    "2709": {"name": "RTX 4070 (AD103)", "chip": "AD103", "form": "desktop", "linux": "untested", "windows": "untested", "notes": "Listed in the nv-uefi-unlocker README.", "refs": ["nvuefi#8"]},
+    "2782": {"name": "RTX 4070 Ti", "chip": "AD104", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "Latence.app MSI reference port and a Gigabyte port worked.", "refs": ["ada#77", "ada#107"]},
+    "2783": {"name": "RTX 4070 SUPER", "chip": "AD104", "form": "desktop", "linux": "working", "windows": "working", "notes": "Generic loader v0.1.4 on a Palit card, MSI B760: FP16 GEMM 70.5 to 100.1 TFLOPS.", "refs": ["ada#33", "nvuefi#3"]},
+    "2786": {"name": "RTX 4070", "chip": "AD104", "form": "desktop", "linux": "working", "windows": "untested", "notes": "", "refs": ["ada#33"]},
+    "2803": {"name": "RTX 4060 Ti (8 GB or 16 GB)", "chip": "AD106", "form": "desktop", "linux": "working", "windows": "working", "notes": "Generic loader on an H310 (16 GB) and an ASUS Z790 APEX (8 GB): FP16 +70%, BF16 +75%.", "refs": ["ada#82", "ada#105", "nvuefi#13"]},
+    "2805": {"name": "RTX 4060 Ti 16 GB", "chip": "AD106", "form": "desktop", "linux": "working", "windows": "working", "notes": "Generic loader v2.1.0 on an Intel NUC13: FP16 45.8 to 75.2 TFLOPS.", "refs": ["ada#68", "ada#98", "nvuefi#31"]},
+    "2882": {"name": "RTX 4060", "chip": "AD107", "form": "desktop", "linux": "working", "windows": "untested", "notes": "", "refs": ["ada#71"]},
+    "28a0": {"name": "RTX 4060 Laptop", "chip": "AD107M", "form": "laptop", "linux": "working", "windows": "untested", "notes": "Disable runtime power-down on Linux; Windows behaviour unknown.", "refs": ["ada#29", "ada#52"]},
+    "28e0": {"name": "RTX 4060 Laptop", "chip": "AD107M", "form": "laptop", "linux": "working", "windows": "working", "notes": "Generic loader v0.2.0 on an ASUS TUF A15 in MUX dGPU-only mode.", "refs": ["ada#99", "ada#106"]},
+    "2757": {"name": "RTX 4090 Laptop", "chip": "AD103M", "form": "laptop", "linux": "partial", "windows": "untested", "notes": "Linux: 2.00x on Lenovo and Alienware, no change on a Clevo.", "refs": ["ada#4", "ada#76"]},
+    "2717": {"name": "RTX 4090 Laptop", "chip": "AD103M", "form": "laptop", "linux": "untested", "windows": "untested", "notes": "Same die as 2757; not yet admitted.", "refs": ["ada#103"]},
+    "2860": {"name": "RTX 4070 Laptop", "chip": "AD106M", "form": "laptop", "linux": "partial", "windows": "untested", "notes": "Unlocks at handoff, back to half rate after the NVIDIA driver starts.", "refs": ["ada#20", "ada#87"]},
+    "2204": {"name": "RTX 3090", "chip": "GA102", "form": "desktop", "linux": "working", "windows": "untested", "notes": "", "refs": ["ada#55"]},
+    "2206": {"name": "RTX 3080", "chip": "GA102", "form": "desktop", "linux": "working", "windows": "working", "notes": "Generic loader v2.1.0 on an MSI Z490: FP16 GEMM about 2x, power-capped.", "refs": ["ada#13", "nvuefi#29"]},
+    "2420": {"name": "RTX 3080 Ti Laptop", "chip": "GA103M", "form": "laptop", "linux": "untested", "windows": "working", "notes": "Generic loader v2.1.0, dGPU-only mode. One run left the BIOS display broken until an EC reset.", "refs": ["nvuefi#27"]},
+    "2484": {"name": "RTX 3070", "chip": "GA104", "form": "desktop", "linux": "working", "windows": "untested", "notes": "", "refs": ["ada#14"]},
+    "2489": {"name": "RTX 3060 Ti LHR", "chip": "GA104", "form": "desktop", "linux": "untested", "windows": "untested", "notes": "Listed in the nv-uefi-unlocker README.", "refs": ["nvuefi#11"]},
+    "249d": {"name": "RTX 3070 Laptop", "chip": "GA104M", "form": "laptop", "linux": "untested", "windows": "partial", "notes": "Worked in MUX dGPU-only mode; a hybrid-only laptop got no gain.", "refs": ["nvuefi#28", "nvuefi#6"]},
+    "2520": {"name": "RTX 3060 Laptop", "chip": "GA106M", "form": "laptop", "linux": "working", "windows": "untested", "notes": "", "refs": ["ada#72"]},
+    "26b1": {"name": "RTX 6000 Ada", "chip": "AD102GL", "form": "desktop", "linux": "not-needed", "windows": "not-needed", "notes": "Professional card, already full rate.", "refs": ["ada#23"]},
+    "2bb1": {"name": "RTX PRO 6000", "chip": "GB202GL", "form": "desktop", "linux": "not-needed", "windows": "not-needed", "notes": "Professional card, already full rate.", "refs": ["ada#24"]},
+    "2b85": {"name": "RTX 5090", "chip": "GB202", "form": "desktop", "linux": "no", "windows": "no", "notes": "Rate set by fuses; host writes dropped.", "refs": ["ada#12", "ada#86"]},
+    "2c18": {"name": "RTX 5090 Laptop", "chip": "GB203M", "form": "laptop", "linux": "no", "windows": "no", "notes": "Rate set by fuses; host writes dropped.", "refs": ["ada#12"]}
+  }
+}
