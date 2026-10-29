@@ -8,6 +8,40 @@ from unittest import mock
 from adakit import bench, check, compat, report, stick, winsys
 
 
+class Security(unittest.TestCase):
+    def test_no_bare_program_names(self):
+        # Bare names are searched in the current folder first on Windows.
+        src = "".join(Path(f).read_text(encoding="utf-8") for f in Path("adakit").glob("*.py"))
+        for bare in ('["powershell.exe"', '["nvidia-smi"', '["bcdedit"', "shutil.which("):
+            self.assertNotIn(bare, src)
+        from adakit import sysbin
+        for exe in (sysbin.POWERSHELL, sysbin.BCDEDIT):
+            self.assertTrue(Path(exe).is_absolute(), exe)
+
+    def test_bench_label_is_a_plain_name(self):
+        for bad in ("../../x", "a\\b", "", ".."):
+            with self.assertRaises(SystemExit):
+                bench.bench(bad, "results")
+
+    def test_tracker_escapes_script_breakouts(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("tbuild", "tracker/build.py")
+        tb = importlib.util.module_from_spec(spec); spec.loader.exec_module(tb)
+        with tempfile.TemporaryDirectory() as d:
+            here = Path(d)
+            (here / "template.html").write_text("<script id=data>/*ENTRIES*/</script>", encoding="utf-8")
+            row = {k: None for k in tb.FIELDS}
+            row.update(card="</script><!--<img src=x onerror=alert(1)>", refs=[], laptop=False, generic=True)
+            (here / "entries.json").write_text(json.dumps({"updated": "x", "entries": [row]}), encoding="utf-8")
+            with mock.patch.object(tb, "HERE", here), mock.patch.object(tb, "ENTRIES", here / "entries.json"), \
+                    mock.patch("sys.argv", ["build.py"]):
+                tb.main()
+            html = (here / "index.html").read_text(encoding="utf-8")
+            inner = html[len("<script id=data>"):-len("</script>")]
+            self.assertNotIn("<", inner)
+            self.assertEqual(json.loads(inner)["entries"][0]["card"], row["card"])
+
+
 class Pnp(unittest.TestCase):
     def test_subsystem_order(self):
         ids = winsys.parse_pnp(r"PCI\VEN_10DE&DEV_2803&SUBSYS_88FB1043&REV_A1\4&1234")
@@ -102,8 +136,13 @@ class Stick(unittest.TestCase):
         payload.write_bytes(b"\x00" * stick.PAYLOAD_BYTES)
         self.pin = mock.patch.object(stick, "PAYLOAD_SHA256", hashlib.sha256(payload.read_bytes()).hexdigest())
         self.pin.start()
+        self.real_assets = dict(stick.KNOWN_ASSETS)
+        fake = {n: stick.sha256(self.src / n) for n in stick.KNOWN_ASSETS}
+        self.assets = mock.patch.dict(stick.KNOWN_ASSETS, fake)
+        self.assets.start()
 
     def tearDown(self):
+        self.assets.stop()
         self.pin.stop()
         self.tmp.cleanup()
 
@@ -178,6 +217,27 @@ class Stick(unittest.TestCase):
         self.assertFalse(stick.came_from_stick(1000, 1000 + 7 * 60))
         self.assertFalse(stick.came_from_stick(1000, 900))
         self.assertIsNone(stick.came_from_stick(None, 1000))
+
+    def test_manifest_cannot_point_outside_stick(self):
+        stick.build(self.src, "F:", root_override=self.dst)
+        mf = self.dst / stick.MANIFEST
+        m = json.loads(mf.read_text())
+        m["files"]["../../outside.bin"] = {"sha256": "0" * 64, "bytes": 1}
+        mf.write_text(json.dumps(m))
+        self.assertTrue(any("unexpected path" in p for p in stick.verify(self.dst)))
+        self.assertNotIn(":", m["source"])  # folder name only, no local path
+
+    def test_asset_pins(self):
+        self.assertEqual(len(self.real_assets), 6)
+        self.assertTrue(all(len(h) == 64 for h in self.real_assets.values()))
+        files = {n: self.src / n for n in stick.KNOWN_ASSETS}
+        self.assertEqual(stick.asset_warnings(files), [])
+        (self.src / "scrubber_ad10x.bin").write_bytes(b"tampered")
+        self.assertEqual(len(stick.asset_warnings(files)), 1)
+
+    def test_ascii_drive_letters_only(self):
+        with self.assertRaises(stick.StickError):
+            stick.normalize("é:")
 
     def test_first_boot_entry(self):
         bcd = ("Firmware Boot Manager\n---------------------\nidentifier              {fwbootmgr}\n"

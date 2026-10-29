@@ -19,6 +19,8 @@ import subprocess
 import time
 from pathlib import Path
 
+from . import sysbin
+
 FAMILY = "ad102"  # every Ada card loads the AD102-family files
 PAYLOAD = f"v67-{FAMILY}-four-plm.bin"
 PAYLOAD_SHA256 = "44c36b2d6b3424e53e18f3e55db85c833655de071ce66ce42749588a4a7dc8cb"  # assets/src/manifest.rs
@@ -27,6 +29,17 @@ ROOT_FILES = [
     f"booter_load_{FAMILY}.bin", f"gsp_boot_desc_{FAMILY}.bin", f"gsp_boot_{FAMILY}.bin",
     f"fwimage_{FAMILY}.bin", f"fwsignature_{FAMILY}.bin", "scrubber_ad10x.bin", PAYLOAD,
 ]
+# Output of upstream make-usbroot.ps1 from the pinned 610.43.03 packages. The
+# extraction is deterministic, so any other hash means a different (or
+# tampered) build. booter_load matches gpu-unlock-ada's published pin.
+KNOWN_ASSETS = {
+    f"booter_load_{FAMILY}.bin": "6ee05b20e1dc244c08c052f36ef28469b8d09f4955d1fe33e48a179e11a7fd49",
+    f"gsp_boot_desc_{FAMILY}.bin": "83f8f3f1f5f9496e0ea8fc7103c2beb64d0b6de2f5ffe725f13514de5a95fa42",
+    f"gsp_boot_{FAMILY}.bin": "45d6335a8185d6ff13e8d1484cea73f68d3d13aa1c19dc080ed1c3482dd5bac0",
+    f"fwimage_{FAMILY}.bin": "004394a6b5a217ef2445631f1e59fbca448d3d8aaa07e001898bf7569b98eec4",
+    f"fwsignature_{FAMILY}.bin": "394612a0279ef8f8b457f91bfa35860e086d195d079975efa07b9f0938e019e7",
+    "scrubber_ad10x.bin": "1cfc78136a4dff4993b7e5a1a09345f6a67d0762555e5bd9660e406831379348",
+}
 EFI_REL = "EFI/BOOT/BOOTX64.EFI"
 ARMED = "i_know_what_i_am_doing.txt"
 MANIFEST = "ADAKIT-MANIFEST.json"
@@ -58,7 +71,7 @@ $disk = $part | Get-CimAssociatedInstance -ResultClassName Win32_DiskDrive | Sel
   system = ($env:SystemDrive -eq '{letter}')
 }} | ConvertTo-Json -Compress
 """
-    out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+    out = subprocess.run([sysbin.POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", script],
                          capture_output=True, text=True)
     try:
         return json.loads(out.stdout)
@@ -83,7 +96,7 @@ def normalize(letter):
     letter = letter.strip().rstrip("\\/").upper()
     if len(letter) == 1:
         letter += ":"
-    if len(letter) != 2 or letter[1] != ":" or not letter[0].isalpha():
+    if len(letter) != 2 or letter[1] != ":" or not ("A" <= letter[0] <= "Z"):
         raise StickError(f"'{letter}' isn't a drive letter like F:")
     return letter
 
@@ -105,6 +118,20 @@ def check_source(src):
     if pay.stat().st_size != PAYLOAD_BYTES or sha256(pay) != PAYLOAD_SHA256:
         raise StickError(f"{pay} doesn't match the pinned payload (SHA-256 {PAYLOAD_SHA256[:12]}…). Regenerate it.")
     return plan
+
+
+def asset_warnings(files):
+    """files: {name: path}. Names whose content differs from the known-good
+    extraction. A warning, not a refusal: a newer upstream may change them."""
+    return [f"{name} differs from the known-good 610.43.03 extraction (sha256 {sha256(path)[:12]}...). "
+            "Only continue if you built it yourself from upstream's make-usbroot.ps1."
+            for name, path in files.items() if name in KNOWN_ASSETS and Path(path).exists()
+            and sha256(path) != KNOWN_ASSETS[name]]
+
+
+def loader_hash(root):
+    efi = Path(root) / EFI_REL
+    return sha256(efi) if efi.exists() else None
 
 
 def stick_mode(root):
@@ -146,7 +173,7 @@ def build(src, letter, unlock=False, root_override=None):
         if want != got:
             raise StickError(f"Copy of {rel} doesn't match its source (stick may be failing).")
         files[dst.relative_to(root).as_posix()] = {"sha256": got, "bytes": dst.stat().st_size}
-    manifest = {"written": time.strftime("%Y-%m-%d %H:%M:%S"), "source": str(Path(src).resolve()),
+    manifest = {"written": time.strftime("%Y-%m-%d %H:%M:%S"), "source": Path(src).resolve().name,
                 "loader_sha256": files[EFI_REL]["sha256"], "files": files}
     (root / MANIFEST).write_text(json.dumps(manifest, indent=2))
     return manifest, stick_mode(root)
@@ -193,7 +220,7 @@ def boot_order_warning():
     """Warn when the firmware will boot Windows before the stick. Needs
     bcdedit, which only answers from an elevated prompt; silent otherwise."""
     try:
-        out = subprocess.run(["bcdedit", "/enum", "firmware"], capture_output=True, text=True, timeout=20).stdout
+        out = subprocess.run([sysbin.BCDEDIT, "/enum", "firmware"], capture_output=True, text=True, timeout=20).stdout
     except (OSError, subprocess.TimeoutExpired):
         return None
     first = first_boot_entry(out)
@@ -218,6 +245,7 @@ def check_unmanaged(root):
     pay = next((p for p in (root / PAYLOAD, root / (PAYLOAD + ".off")) if p.exists()), None)
     if pay and (pay.stat().st_size != PAYLOAD_BYTES or sha256(pay) != PAYLOAD_SHA256):
         problems.append(f"{pay.name} doesn't match the pinned payload hash")
+    problems += asset_warnings({n: root / n for n in KNOWN_ASSETS})
     return problems
 
 
@@ -229,7 +257,11 @@ def verify(root):
         return check_unmanaged(root)
     manifest = json.loads(mf.read_text())
     problems = []
+    allowed = set(ROOT_FILES) | {PAYLOAD + ".off", EFI_REL}
     for rel, meta in manifest["files"].items():
+        if rel not in allowed:
+            problems.append(f"manifest lists an unexpected path {rel!r}; ignored")
+            continue
         p = root / rel
         if rel.startswith(PAYLOAD) and not p.exists():
             alt = root / (PAYLOAD if rel.endswith(".off") else PAYLOAD + ".off")
@@ -238,7 +270,7 @@ def verify(root):
             problems.append(f"missing {rel}")
         elif sha256(p) != meta["sha256"]:
             problems.append(f"changed {rel}")
-    return problems
+    return problems + asset_warnings({n: root / n for n in KNOWN_ASSETS})
 
 
 def find_sticks():
@@ -246,7 +278,7 @@ def find_sticks():
     `adakit status` when no drive is given."""
     script = ("Get-CimInstance Win32_LogicalDisk | Where-Object { $_.FileSystem -eq 'FAT32' } | "
               "ForEach-Object { $_.DeviceID }")
-    out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+    out = subprocess.run([sysbin.POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", script],
                          capture_output=True, text=True)
     return [d.strip() for d in out.stdout.split() if d.strip()
             and (Path(d.strip() + "\\") / EFI_REL).exists()

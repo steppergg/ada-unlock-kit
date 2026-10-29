@@ -13,10 +13,13 @@ TFLOPS, FP32 as the control row, plus a correctness check against FP64.
 """
 
 import json
+import re
 import statistics
 import subprocess
 import time
 from pathlib import Path
+
+from . import sysbin
 
 FLOPS_PER_SM_CLK = {(8, 9): 1024, (8, 6): 512, (8, 7): 512}
 UNLOCKED_AT, STOCK_BELOW = 0.70, 0.60
@@ -45,7 +48,7 @@ def _torch():
 
 
 def smi(query):
-    out = subprocess.run(["nvidia-smi", f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+    out = subprocess.run([sysbin.nvidia_smi(), f"--query-gpu={query}", "--format=csv,noheader,nounits"],
                          capture_output=True, text=True)
     return out.stdout.strip().splitlines()[0] if out.stdout.strip() else ""
 
@@ -85,7 +88,7 @@ def sample_under_load(torch, op):
     while time.perf_counter() < end:
         op()
         torch.cuda.synchronize()
-    proc = subprocess.Popen(["nvidia-smi", "--query-gpu=clocks.sm,power.draw,clocks_event_reasons.sw_power_cap",
+    proc = subprocess.Popen([sysbin.nvidia_smi(), "--query-gpu=clocks.sm,power.draw,clocks_event_reasons.sw_power_cap",
                              "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True)
     while proc.poll() is None:
         op()
@@ -147,6 +150,8 @@ def correctness(torch):
 
 
 def bench(label, out_dir, passes=2, log=print):
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,40}", label) or set(label) == {"."}:
+        raise SystemExit("Use a label of letters, digits, - _ or . (e.g. stock, unlocked-216w).")
     torch = _torch()
     props = torch.cuda.get_device_properties(0)
     cc = (props.major, props.minor)

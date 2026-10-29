@@ -74,6 +74,9 @@ It times an FP16 GEMM with FP32 accumulate while sampling the SM clock under loa
 ## Safety
 
 - The kit refuses any drive that isn't a FAT32 volume on a USB disk, and never formats anything.
+- It checks the payload against a pinned SHA-256 and refuses a mismatch, and warns if any of the other firmware files differ from the known-good extraction of NVIDIA's 610.43.03 packages. It can't vouch for `BOOTX64.EFI`: build it from source, or compare its hash (shown by `stick` and `status`) with the release you trust.
+- It starts programs by full path (System32, the NVIDIA driver folder), so a planted `nvidia-smi.exe` or `powershell.exe` in the folder you run it from is never used.
+- With Secure Boot off, the stick armed and first in the boot order, the PC runs whatever loader is on that stick before Windows, with no prompt. Anyone who can plug in a different stick gets the same. Keep the stick physically safe, or leave it unarmed and pick it from the boot menu.
 - New sticks start in replay mode: the payload is stored as `.off`, so the loader runs the signed firmware transaction without writing the unlock.
 - The kit never creates the auto-run marker (`i_know_what_i_am_doing.txt`). `mode F: disarm` renames it if present.
 - The unlock leaves some GPU firmware protections open until the next power-off. Don't use it on a shared or multi-tenant machine.

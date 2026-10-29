@@ -7,15 +7,13 @@ and an FP32 control row that moved.
 """
 
 import json
-import shutil
 import subprocess
 from html import escape
 from pathlib import Path
 
+from . import sysbin
+
 CASES = [("FP16", 8192), ("BF16", 8192), ("FP8 e4m3", 8192), ("TF32", 4096), ("FP32 (control)", 4096)]
-BROWSERS = [r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-            r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe"]
 
 
 def pct(gain):
@@ -94,7 +92,7 @@ def chart_html(rows, title, foot):
 
 
 def render_png(html_path, png_path, w, h):
-    browser = next((b for b in BROWSERS if Path(b).exists()), None) or shutil.which("msedge") or shutil.which("chrome")
+    browser = sysbin.browser()
     if not browser:
         return False
     subprocess.run([browser, "--headless=new", "--disable-gpu", "--hide-scrollbars", f"--window-size={w},{h}",

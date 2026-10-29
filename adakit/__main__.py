@@ -43,10 +43,13 @@ def cmd_stick(a):
         if ok.strip().lower() != "y":
             print("Nothing written.")
             return 1
+    for w in stick.asset_warnings({n: Path(a.source) / n for n in stick.KNOWN_ASSETS}):
+        print(f"  [warn] {w}")
     manifest, (mode, armed) = stick.build(a.source, letter, unlock=a.unlock)
     for rel, meta in manifest["files"].items():
         print(f"  {rel:<36}{meta['bytes']:>10} bytes  {meta['sha256'][:16]}...")
     print(f"Written and verified. Mode: {mode}{', ARMED (auto-runs)' if armed else ''}.")
+    print(f"Loader SHA-256 {manifest['loader_sha256']}: compare it with the build or release you trust.")
     print("Next: power off fully, boot the stick from the firmware boot menu, and check \\loader.log on the stick afterwards.")
     return 0
 
@@ -89,6 +92,8 @@ def show_status(letter=None):
     run = stick.last_run(root)
     ver = f"nv-uefi-unlocker {run['version']}" + (f" (built {run['built']})" if run and run.get("built") else "") if run and run.get("version") else "loader version unknown"
     print(f"Stick      {d}  {ver} | mode {mode}{' | ARMED: auto-runs after 5 s' if armed else ''}")
+    lh = stick.loader_hash(root)
+    print(f"Loader     BOOTX64.EFI sha256 {lh[:16]}..." if lh else r"Loader     no \EFI\BOOT\BOOTX64.EFI")
     if run:
         if run["aborted"]:
             what = "aborted at the confirm screen, nothing unlocked"

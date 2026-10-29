@@ -8,6 +8,8 @@ import json
 import re
 import subprocess
 
+from . import sysbin
+
 PS_SCRIPT = r"""
 $ErrorActionPreference = 'SilentlyContinue'
 function Reg($path, $name) { (Get-ItemProperty -Path $path -Name $name).$name }
@@ -41,7 +43,7 @@ LAPTOP_CHASSIS = {8, 9, 10, 11, 14, 30, 31, 32}
 
 
 def powershell(script):
-    out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+    out = subprocess.run([sysbin.POWERSHELL, "-NoProfile", "-NonInteractive", "-Command", script],
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
     return out.stdout.strip()
 
@@ -62,7 +64,7 @@ def nvidia_smi():
     """Per-GPU facts only nvidia-smi knows (VBIOS, power limits, bus id)."""
     fields = "name,pci.bus_id,pci.device_id,vbios_version,driver_version,power.limit,power.max_limit,memory.total"
     try:
-        out = subprocess.run(["nvidia-smi", f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+        out = subprocess.run([sysbin.nvidia_smi(), f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
                              capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         return []

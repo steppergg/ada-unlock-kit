@@ -51,7 +51,9 @@ def main():
         data["updated"] = time.strftime("%Y-%m-%d")
         ENTRIES.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
     validate(data)
-    payload = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    # Escape every "<" so submitted text can't close the <script> or open a
+    # comment inside it; JSON.parse turns < back into "<".
+    payload = json.dumps(data, separators=(",", ":")).replace("<", "\\u003c")
     html = (HERE / "template.html").read_text(encoding="utf-8").replace("/*ENTRIES*/", payload)
     (HERE / "index.html").write_text(html, encoding="utf-8")
     print(f"{len(data['entries'])} entries -> {HERE / 'index.html'}")
