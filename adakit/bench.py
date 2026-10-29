@@ -20,6 +20,7 @@ from pathlib import Path
 
 FLOPS_PER_SM_CLK = {(8, 9): 1024, (8, 6): 512, (8, 7): 512}
 UNLOCKED_AT, STOCK_BELOW = 0.70, 0.60
+LOAD_S = 1.5
 
 
 def verdict(efficiency):
@@ -77,7 +78,13 @@ def timed(torch, op, n, warmup=5, iters=20):
 
 def sample_under_load(torch, op):
     """Keep the GEMM running until nvidia-smi (slow to start) answers, so the
-    clock and power it reports are the loaded values."""
+    clock and power it reports are the loaded values. The driver refreshes
+    these readings about once a second, so load the GPU for LOAD_S first;
+    otherwise a short case reports the previous case's sample."""
+    end = time.perf_counter() + LOAD_S
+    while time.perf_counter() < end:
+        op()
+        torch.cuda.synchronize()
     proc = subprocess.Popen(["nvidia-smi", "--query-gpu=clocks.sm,power.draw,clocks_event_reasons.sw_power_cap",
                              "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True)
     while proc.poll() is None:
