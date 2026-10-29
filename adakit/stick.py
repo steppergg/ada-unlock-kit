@@ -165,12 +165,29 @@ def set_mode(root, mode):
     return stick_mode(root)
 
 
+def check_unmanaged(root):
+    """A stick laid out by hand: no manifest to compare against, so check
+    what can be checked without one."""
+    problems = []
+    for name in ROOT_FILES:
+        if name == PAYLOAD:
+            continue
+        if not (root / name).exists():
+            problems.append(f"missing {name}")
+    if not (root / EFI_REL).exists():
+        problems.append(f"missing {EFI_REL}")
+    pay = next((p for p in (root / PAYLOAD, root / (PAYLOAD + ".off")) if p.exists()), None)
+    if pay and (pay.stat().st_size != PAYLOAD_BYTES or sha256(pay) != PAYLOAD_SHA256):
+        problems.append(f"{pay.name} doesn't match the pinned payload hash")
+    return problems
+
+
 def verify(root):
     """Re-hash the stick against its manifest. Returns list of problems."""
     root = Path(root)
     mf = root / MANIFEST
     if not mf.exists():
-        return ["No ADAKIT-MANIFEST.json on the stick (not written by the kit)."]
+        return check_unmanaged(root)
     manifest = json.loads(mf.read_text())
     problems = []
     for rel, meta in manifest["files"].items():
