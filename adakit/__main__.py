@@ -53,6 +53,9 @@ def cmd_mode(a):
     if a.mode == "status":
         mode, armed = stick.stick_mode(root)
         problems = stick.verify(root)
+        order = stick.boot_order_warning()
+        if order:
+            problems.append(order)
     else:
         mode, armed = stick.set_mode(root, a.mode)
         problems = []

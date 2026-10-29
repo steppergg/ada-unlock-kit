@@ -139,6 +139,19 @@ class Stick(unittest.TestCase):
         (self.dst / "scrubber_ad10x.bin").write_bytes(b"changed")
         self.assertIn("changed scrubber_ad10x.bin", stick.verify(self.dst))
 
+    def test_first_boot_entry(self):
+        bcd = ("Firmware Boot Manager\n---------------------\nidentifier              {fwbootmgr}\n"
+               "displayorder            {bootmgr}\n                        {f8d10c35}\ntimeout                 1\n\n"
+               "Windows Boot Manager\n--------------------\nidentifier              {bootmgr}\n"
+               "description             Windows Boot Manager\n\n"
+               "Firmware Application (101fffff)\n-------------------------------\nidentifier              {f8d10c35}\n"
+               "description             UEFI: SanDisk, Partition 2\n")
+        self.assertEqual(stick.first_boot_entry(bcd), "Windows Boot Manager")
+        self.assertEqual(stick.first_boot_entry(bcd.replace("displayorder            {bootmgr}\n                        {f8d10c35}",
+                                                            "displayorder            {f8d10c35}\n                        {bootmgr}")),
+                         "UEFI: SanDisk, Partition 2")
+        self.assertIsNone(stick.first_boot_entry("Access is denied."))
+
     def test_drive_rules(self):
         good = {"exists": True, "system": False, "bus": "USB", "fs": "FAT32"}
         stick.check_drive(good, "F:")

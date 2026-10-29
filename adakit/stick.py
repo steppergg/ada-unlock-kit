@@ -13,6 +13,7 @@ without writing the unlock. `adakit mode F: unlock` renames it back.
 
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import time
@@ -163,6 +164,35 @@ def set_mode(root, mode):
         if armed.exists():
             armed.rename(root / (ARMED + ".off"))
     return stick_mode(root)
+
+
+def first_boot_entry(bcd_text):
+    """Description of the first firmware boot entry in `bcdedit /enum
+    firmware` output, or None if it can't be read."""
+    m = re.search(r"displayorder\s+(\{[^}]+\})", bcd_text)
+    if not m:
+        return None
+    first = m.group(1)
+    for block in re.split(r"\r?\n\s*\r?\n", bcd_text):
+        if re.search(r"identifier\s+" + re.escape(first), block):
+            d = re.search(r"description\s+(.+)", block)
+            return d.group(1).strip() if d else first
+    return first
+
+
+def boot_order_warning():
+    """Warn when the firmware will boot Windows before the stick. Needs
+    bcdedit, which only answers from an elevated prompt; silent otherwise."""
+    try:
+        out = subprocess.run(["bcdedit", "/enum", "firmware"], capture_output=True, text=True, timeout=20).stdout
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    first = first_boot_entry(out)
+    if first and "windows boot manager" in first.lower():
+        return ("Windows Boot Manager is first in the boot order, so the stick won't run on its own. "
+                "Pick the stick from the firmware boot menu (F8 on ASUS, F11 on MSI), or set it as Boot Option #1 again "
+                "(boards often drop it after the stick is unplugged).")
+    return None
 
 
 def check_unmanaged(root):
