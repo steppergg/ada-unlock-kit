@@ -1,0 +1,274 @@
+<title>Windows Unlock Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=Chivo:wght@400;600&family=Chivo+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one working column; filters, then a dense results table that becomes cards on phones, then the submit panel */
+:root {
+  --bg: #f3f5f6; --surface: #ffffff; --fg: #162027; --muted: #5b6973; --line: #d8dfe3;
+  --accent: #1d5f86; --accent-soft: #dceaf3;
+  --ok: #2f7a4c; --ok-soft: #dcefe3; --warn: #9a6512; --warn-soft: #f6ead3; --no: #9b3434; --no-soft: #f4dede;
+  --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body: "Chivo", "Segoe UI", system-ui, sans-serif;
+  --mono: "Chivo Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10161a; --surface: #172027; --fg: #e3e9ec; --muted: #94a3ad; --line: #29353d;
+    --accent: #6fb3dd; --accent-soft: #1b3445;
+    --ok: #74c493; --ok-soft: #1a3324; --warn: #e0b065; --warn-soft: #3a2e17; --no: #e28585; --no-soft: #3a2020;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10161a; --surface: #172027; --fg: #e3e9ec; --muted: #94a3ad; --line: #29353d;
+  --accent: #6fb3dd; --accent-soft: #1b3445;
+  --ok: #74c493; --ok-soft: #1a3324; --warn: #e0b065; --warn-soft: #3a2e17; --no: #e28585; --no-soft: #3a2020;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--body); font-size: 15px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 40px 64px; display: grid; gap: 36px; }
+h1, h2 { font-family: var(--display); margin: 0; line-height: 1.15; text-wrap: balance; }
+h1 { font-size: clamp(1.9rem, 4.5vw, 2.7rem); }
+h2 { font-size: 1.35rem; }
+p { margin: 0; }
+a { color: var(--accent); text-underline-offset: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+.eyebrow { font-family: var(--mono); font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+header { display: grid; gap: 14px; }
+.lede { color: var(--muted); max-width: 70ch; font-size: 1.05rem; }
+.stats { display: flex; flex-wrap: wrap; gap: 8px 28px; font-family: var(--mono); font-size: 0.85rem; color: var(--muted); }
+.stats b { font-family: var(--display); font-size: 1.5rem; color: var(--fg); font-weight: 700; margin-right: 6px; font-variant-numeric: tabular-nums; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.controls input[type="search"] { flex: 1 1 240px; min-width: 0; padding: 9px 12px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); color: var(--fg); font: inherit; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.85rem; padding: 8px 12px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--fg); font-weight: 600; }
+
+.tablebox { overflow-x: auto; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-family: var(--mono); font-weight: 500; font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+tbody tr:last-child td { border-bottom: 0; }
+td.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+th.num { text-align: right; }
+.card-name { font-weight: 600; }
+.sub { color: var(--muted); font-family: var(--mono); font-size: 0.76rem; display: block; }
+.pill { display: inline-block; font-family: var(--mono); font-size: 0.72rem; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+.pill.unlocked { background: var(--ok-soft); color: var(--ok); }
+.pill.partial { background: var(--warn-soft); color: var(--warn); }
+.pill.nogain { background: var(--no-soft); color: var(--no); }
+.tool { font-size: 0.82rem; }
+.tool .kind { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); display: block; }
+.notes { color: var(--muted); font-size: 0.84rem; max-width: 46ch; }
+.refs { font-family: var(--mono); font-size: 0.75rem; }
+.refs a { color: var(--muted); }
+.dash { color: var(--muted); }
+.empty { padding: 28px; text-align: center; color: var(--muted); }
+@media (max-width: 760px) {
+  table, thead, tbody, tr, td { display: block; width: 100%; }
+  thead { display: none; }
+  tbody tr { border-bottom: 1px solid var(--line); padding: 12px 14px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px 10px; }
+  td { border: 0; padding: 0; min-width: 0; }
+  td.cardcol, td.boardcol, td.toolcol, td.notecol { grid-column: 1 / -1; }
+  td.num { text-align: left; }
+  td.num::before { content: attr(data-label); display: block; font-family: var(--mono); font-size: 0.68rem; color: var(--muted); text-transform: uppercase; }
+}
+
+.submit { display: grid; gap: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 20px; }
+.submit p { max-width: 72ch; }
+.submit ol { margin: 0; padding-left: 1.3em; display: grid; gap: 4px; max-width: 72ch; }
+textarea { width: 100%; min-height: 150px; font-family: var(--mono); font-size: 0.8rem; padding: 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--bg); color: var(--fg); resize: vertical; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { display: inline-block; font: inherit; font-weight: 600; padding: 9px 16px; border-radius: 6px; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--surface); text-decoration: none; cursor: pointer; }
+.btn.ghost { background: none; color: var(--accent); }
+.btn[aria-disabled="true"] { opacity: 0.45; pointer-events: none; }
+.msg { font-size: 0.88rem; }
+.msg.err { color: var(--no); }
+.msg.ok { color: var(--ok); }
+footer { color: var(--muted); font-size: 0.84rem; border-top: 1px solid var(--line); padding-top: 16px; display: grid; gap: 6px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">RTX 30 / 40 series · pre-boot UEFI unlock · Windows only</span>
+    <h1>Windows Unlock Tracker</h1>
+    <p class="lede">Every public report of the FP32-accumulate tensor unlock working, or not working, on Windows. Gains are cuBLAS GEMM, stock vs unlocked on the same card. Linux results live in the gpu-unlock-ada issue tracker.</p>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <section style="display:grid;gap:14px">
+    <div class="controls">
+      <label class="eyebrow" for="q" style="position:absolute;left:-9999px">Search</label>
+      <input type="search" id="q" placeholder="Search card, ID, board, VBIOS…" autocomplete="off">
+      <div class="seg" role="group" aria-label="Loader">
+        <button type="button" data-f="tool" data-v="all" aria-pressed="true">All loaders</button>
+        <button type="button" data-f="tool" data-v="generic" aria-pressed="false">Generic loader</button>
+        <button type="button" data-f="tool" data-v="port" aria-pressed="false">Per-board port</button>
+      </div>
+      <div class="seg" role="group" aria-label="Form factor">
+        <button type="button" data-f="form" data-v="all" aria-pressed="true">All</button>
+        <button type="button" data-f="form" data-v="desktop" aria-pressed="false">Desktop</button>
+        <button type="button" data-f="form" data-v="laptop" aria-pressed="false">Laptop</button>
+      </div>
+    </div>
+    <div class="tablebox">
+      <table>
+        <thead><tr>
+          <th>Card</th><th>Board</th><th>Loader</th><th>Result</th>
+          <th class="num">FP16</th><th class="num">BF16</th><th class="num">FP8</th><th class="num">TF32</th><th>Notes</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="submit" aria-labelledby="sub-h">
+    <h2 id="sub-h">Add your result</h2>
+    <p>Run a matched pair on the same card, driver and power limit: one normal boot, one unlocked boot. With ada-unlock-kit that is:</p>
+    <ol>
+      <li><code>python -m adakit bench stock</code> on a normal boot</li>
+      <li><code>python -m adakit bench unlocked</code> after booting the stick</li>
+      <li><code>python -m adakit report results\result-stock.json results\result-unlocked.json --loader "nv-uefi-unlocker vX"</code></li>
+    </ol>
+    <p>Paste the <code>entry.json</code> it writes below. The page checks it and opens a GitHub issue with your numbers filled in; attach <code>report.md</code> and <code>chart.png</code> there. Nothing is sent until you submit on GitHub.</p>
+    <label class="eyebrow" for="entry">entry.json</label>
+    <textarea id="entry" spellcheck="false" placeholder='{ "card": "NVIDIA GeForce RTX 4060 Ti", "device_id": "10de:2803", ... }'></textarea>
+    <div class="row">
+      <a class="btn" id="open-issue" href="#" target="_blank" rel="noopener" aria-disabled="true">Open GitHub issue</a>
+      <a class="btn ghost" id="blank-issue" target="_blank" rel="noopener">Report without the kit</a>
+      <span class="msg" id="msg" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <footer>
+    <p>Updated <span id="updated"></span>. Numbers are as reported in the linked issues; check them before relying on a figure. A dash means the report didn't measure it.</p>
+    <p>The unlock changes AI compute speed only: games and DLSS don't change. It leaves some GPU firmware protections open until the next power-off, so don't use it on shared machines.</p>
+  </footer>
+</div>
+
+<script id="data" type="application/json">/*ENTRIES*/</script>
+<script>
+(function () {
+  "use strict";
+  var DATA = JSON.parse(document.getElementById("data").textContent);
+  var SOURCES = { ada: "https://github.com/JustAResearcher/gpu-unlock-ada/issues/", nvuefi: "https://github.com/physicsdolphin/nv-uefi-unlocker/issues/" };
+  var ISSUE_REPO = "https://github.com/physicsdolphin/nv-uefi-unlocker/issues/new";
+  var state = { q: "", tool: "all", form: "all" };
+
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function gain(v) { return v == null ? null : (v > 0 ? "+" : "") + v + "%"; }
+
+  function renderStats() {
+    var e = DATA.entries, cards = {}, generic = 0, unlocked = 0;
+    e.forEach(function (r) { cards[r.device_id] = 1; if (r.generic) generic++; if (r.result === "unlocked") unlocked++; });
+    var s = document.getElementById("stats"); s.textContent = "";
+    [[e.length, "reports"], [unlocked, "unlocked"], [Object.keys(cards).length, "device IDs"], [generic, "on the generic loader"]].forEach(function (p) {
+      var span = el("span"); span.appendChild(el("b", null, String(p[0]))); span.appendChild(document.createTextNode(p[1])); s.appendChild(span);
+    });
+    document.getElementById("updated").textContent = DATA.updated;
+  }
+
+  function matches(r) {
+    if (state.tool === "generic" && !r.generic) return false;
+    if (state.tool === "port" && r.generic) return false;
+    if (state.form === "laptop" && !r.laptop) return false;
+    if (state.form === "desktop" && r.laptop) return false;
+    if (!state.q) return true;
+    var hay = [r.card, r.device_id, r.subsystem, r.vbios, r.board, r.tool, r.notes].join(" ").toLowerCase();
+    return state.q.toLowerCase().split(/\s+/).every(function (w) { return hay.indexOf(w) !== -1; });
+  }
+
+  function numCell(label, v) {
+    var td = el("td", "num"); td.setAttribute("data-label", label);
+    var g = gain(v);
+    if (g == null) td.appendChild(el("span", "dash", "—")); else td.textContent = g;
+    return td;
+  }
+
+  function renderRows() {
+    var body = document.getElementById("rows"); body.textContent = "";
+    var list = DATA.entries.filter(matches);
+    if (!list.length) {
+      var tr = el("tr"), td = el("td", "empty", "No reports match. Clear the search or filters."); td.colSpan = 9; tr.appendChild(td); body.appendChild(tr); return;
+    }
+    list.forEach(function (r) {
+      var tr = el("tr");
+      var c = el("td", "cardcol"); c.appendChild(el("span", "card-name", r.card));
+      c.appendChild(el("span", "sub", "10de:" + r.device_id + (r.subsystem ? " · " + r.subsystem : "") + (r.vbios ? " · " + r.vbios : "")));
+      tr.appendChild(c);
+      var b = el("td", "boardcol", r.board); if (r.laptop) b.appendChild(el("span", "sub", "laptop")); tr.appendChild(b);
+      var t = el("td", "toolcol tool"); t.appendChild(el("span", "kind", r.generic ? "generic loader" : "per-board port")); t.appendChild(document.createTextNode(r.tool)); tr.appendChild(t);
+      var res = el("td"); var cls = r.result === "unlocked" ? "unlocked" : (r.result === "no gain" ? "nogain" : "partial");
+      res.appendChild(el("span", "pill " + cls, r.result)); tr.appendChild(res);
+      tr.appendChild(numCell("FP16", r.fp16)); tr.appendChild(numCell("BF16", r.bf16)); tr.appendChild(numCell("FP8", r.fp8)); tr.appendChild(numCell("TF32", r.tf32));
+      var n = el("td", "notecol"); n.appendChild(el("p", "notes", r.notes));
+      var refs = el("span", "refs");
+      r.refs.forEach(function (ref, i) {
+        var parts = ref.split("#"); var a = el("a", null, (parts[0] === "ada" ? "gpu-unlock-ada #" : "nv-uefi-unlocker #") + parts[1]);
+        a.href = SOURCES[parts[0]] + parts[1]; a.target = "_blank"; a.rel = "noopener";
+        if (i) refs.appendChild(document.createTextNode("  ")); refs.appendChild(a);
+      });
+      n.appendChild(refs); tr.appendChild(n);
+      body.appendChild(tr);
+    });
+  }
+
+  document.getElementById("q").addEventListener("input", function (e) { state.q = e.target.value.trim(); renderRows(); });
+  Array.prototype.forEach.call(document.querySelectorAll(".seg button"), function (btn) {
+    btn.addEventListener("click", function () {
+      state[btn.dataset.f] = btn.dataset.v;
+      Array.prototype.forEach.call(btn.parentNode.children, function (b) { b.setAttribute("aria-pressed", String(b === btn)); });
+      renderRows();
+    });
+  });
+
+  // Submission: validate entry.json, build a prefilled issue URL.
+  var REQUIRED = ["card", "device_id", "board", "fp16_gain_pct", "result"];
+  var link = document.getElementById("open-issue"), msg = document.getElementById("msg");
+  function v(x) { return x == null || x === "" ? "not recorded" : String(x); }
+  function pct(x) { return x == null ? "not measured" : (x > 0 ? "+" : "") + x + "%"; }
+  function check() {
+    var txt = document.getElementById("entry").value.trim();
+    link.setAttribute("aria-disabled", "true"); link.href = "#"; msg.className = "msg"; msg.textContent = "";
+    if (!txt) return;
+    var e;
+    try { e = JSON.parse(txt); } catch (err) { msg.className = "msg err"; msg.textContent = "That isn't valid JSON. Paste the whole entry.json file."; return; }
+    var missing = REQUIRED.filter(function (k) { return !(k in e); });
+    if (missing.length) { msg.className = "msg err"; msg.textContent = "Missing " + missing.join(", ") + ". Use the entry.json from adakit report."; return; }
+    var title = "[Windows report] " + e.card + " (" + e.device_id + ") on " + e.board + ": " + e.result;
+    var body = [
+      "### Windows unlock report (ada-unlock-kit entry)", "",
+      "| | |", "|---|---|",
+      "| Card | " + v(e.card) + " `" + v(e.device_id) + "` subsystem `" + v(e.subsystem) + "` |",
+      "| VBIOS | `" + v(e.vbios) + "` |",
+      "| Board / BIOS | " + v(e.board) + " / " + v(e.bios) + (e.laptop ? " (laptop)" : "") + " |",
+      "| OS / driver | " + v(e.os) + " / " + v(e.driver) + " |",
+      "| Loader | " + v(e.loader) + " |",
+      "| Power limit | " + v(e.power_limit_w) + " W |", "",
+      "| Gain, stock to unlocked | |", "|---|---:|",
+      "| FP16 8192³ | " + pct(e.fp16_gain_pct) + " |", "| BF16 8192³ | " + pct(e.bf16_gain_pct) + " |",
+      "| FP8 e4m3 8192³ | " + pct(e.fp8_gain_pct) + " |", "| TF32 4096³ | " + pct(e.tf32_gain_pct) + " |", "",
+      "Result: **" + v(e.result) + "**", "",
+      "(Attach report.md and chart.png from `adakit report`, and loader.log from the stick.)", "",
+      "```json", JSON.stringify(e, null, 2), "```"
+    ].join("\n");
+    link.href = ISSUE_REPO + "?title=" + encodeURIComponent(title) + "&body=" + encodeURIComponent(body);
+    link.setAttribute("aria-disabled", "false");
+    msg.className = "msg ok"; msg.textContent = "Looks good: " + e.card + ", FP16 " + pct(e.fp16_gain_pct) + ".";
+  }
+  document.getElementById("entry").addEventListener("input", check);
+  document.getElementById("blank-issue").href = ISSUE_REPO + "?title=" + encodeURIComponent("[Windows report] <card> on <board>") +
+    "&body=" + encodeURIComponent("Card and device ID:\nSubsystem / VBIOS:\nBoard and BIOS:\nLaptop (MUX mode?):\nLoader and version:\nDriver / power limit:\n\nStock vs unlocked (same card, driver, power limit):\n\nloader.log attached: yes / no\n");
+
+  renderStats();
+  renderRows();
+})();
+</script>
