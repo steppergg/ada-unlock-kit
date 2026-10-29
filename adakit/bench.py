@@ -4,7 +4,7 @@ verify: one FP16 GEMM with FP32 accumulate, timed while the SM clock is
 sampled, divided by the card's peak at that clock. Peak is SMs x clock x
 dense FP16 flops per SM per clock (1024 on Ada sm_89, 512 on Ampere sm_86).
 Stock cards run FP32 accumulate at half that peak, so the efficiency reads
-about 0.45-0.5 stock and 0.85-1.0 unlocked whatever the clock or power cap.
+about 0.45-0.5 stock and 0.8-1.0 unlocked (0.83 measured at the power limit) whatever the clock or power cap.
 No kernel driver, no admin rights.
 
 bench: the matched A/B set used in gpu-unlock-ada #80/#82: torch.mm on
