@@ -123,6 +123,8 @@ def build(stock_path, unlocked_path, out_dir, facts=None, loader=None):
     unlocked, ub = load(unlocked_path)
     loader = loader or (facts or {}).get("loader")
     rows = table(sb, ub)
+    if not rows:
+        raise SystemExit("The two results share no benchmark cases. Run `adakit bench` for both with the same kit version.")
     notes = fairness(stock, unlocked, sb, ub)
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)

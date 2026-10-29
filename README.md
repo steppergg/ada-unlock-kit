@@ -9,7 +9,7 @@ The kit doesn't unlock anything itself and ships no firmware. It helps you:
 | Command | What it does | Writes anything? |
 |---|---|---|
 | `check` | Reads your GPU, board, VBIOS, Secure Boot, BitLocker and Fast Startup state, and tells you what's known about your card from the issue trackers | No |
-| `stick F:` | Copies only the files the loader opens onto a FAT32 USB stick, puts `BOOTX64.EFI` in `\EFI\BOOT\`, verifies every copy by SHA-256, writes a manifest. Starts in **replay mode** | The USB stick only |
+| `stick F:` | Copies only the files the loader opens onto a FAT32 USB stick, puts `BOOTX64.EFI` in `\EFI\BOOT\`, verifies every copy by SHA-256, writes a manifest. Starts in **replay mode**. RTX 40 only for now: it refuses when the PC has only RTX 30 cards (`--other-pc` to make a stick for another machine) | The USB stick only |
 | `status` | Did this boot come from the stick? Last loader run and version, boot-order warning | No |
 | `mode F: …` | Switches the stick between `replay` and `unlock`, shows `status`, or `disarm`s auto-run | The USB stick only |
 | `verify` | 10-second benchmark: is FP32-accumulate tensor math at full rate right now? | No |
@@ -75,7 +75,7 @@ Per clock the unlock is close to 2×. The absolute gain is smaller because the u
 
 ## How `verify` decides
 
-It times an FP16 GEMM with FP32 accumulate while sampling the SM clock under load, then divides by the card's full-rate peak at that clock: SMs × clock × 1024 flops (Ada) or 512 (Ampere). A stock card reads about 0.5 and an unlocked card 0.8 to 1.0 (lower end when it hits its power limit), whatever the clock. Measured on a 4060 Ti 8 GB: 0.48 stock, 0.83 unlocked at the power limit. It loads no kernel driver and needs no admin rights. For a register-level answer, upstream's `ssdiag` reads the selectors directly (it loads a signed kernel driver for the duration of the run).
+It times an FP16 GEMM with FP32 accumulate while sampling the SM clock under load, then divides by the card's full-rate peak at that clock: SMs × clock × 1024 flops (the same for Ada and Ampere, per NVIDIA's whitepapers). A stock card reads about 0.5 and an unlocked card 0.8 to 1.0 (lower end when it hits its power limit), whatever the clock. Measured on a 4060 Ti 8 GB: 0.48 stock, 0.83 unlocked at the power limit. It loads no kernel driver and needs no admin rights. For a register-level answer, upstream's `ssdiag` reads the selectors directly (it loads a signed kernel driver for the duration of the run).
 
 ## Safety
 

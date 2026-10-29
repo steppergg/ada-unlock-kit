@@ -2,7 +2,9 @@
 
 verify: one FP16 GEMM with FP32 accumulate, timed while the SM clock is
 sampled, divided by the card's peak at that clock. Peak is SMs x clock x
-dense FP16 flops per SM per clock (1024 on Ada sm_89, 512 on Ampere sm_86).
+dense FP16 flops per SM per clock: 1024 on both Ada sm_89 and Ampere sm_86
+(RTX 3070 whitepaper: 81.3 TFLOPS FP16 dense = 46 SMs x 1.725 GHz x 1024,
+40.6 with FP32 accumulate).
 Stock cards run FP32 accumulate at half that peak, so the efficiency reads
 about 0.45-0.5 stock and 0.8-1.0 unlocked (0.83 measured at the power limit) whatever the clock or power cap.
 No kernel driver, no admin rights.
@@ -21,7 +23,7 @@ from pathlib import Path
 
 from . import sysbin
 
-FLOPS_PER_SM_CLK = {(8, 9): 1024, (8, 6): 512, (8, 7): 512}
+FLOPS_PER_SM_CLK = {(8, 9): 1024, (8, 6): 1024}
 UNLOCKED_AT, STOCK_BELOW = 0.70, 0.60
 LOAD_S = 1.5
 
@@ -47,8 +49,19 @@ def _torch():
     return torch
 
 
-def smi(query):
-    out = subprocess.run([sysbin.nvidia_smi(), f"--query-gpu={query}", "--format=csv,noheader,nounits"],
+def smi_target(torch):
+    """nvidia-smi selector for the GPU torch benchmarks. CUDA numbers GPUs
+    fastest-first and nvidia-smi by PCI bus, so on a multi-GPU PC "first"
+    can be two different cards; select by bus id instead."""
+    p = torch.cuda.get_device_properties(0)
+    try:
+        return ["-i", f"{p.pci_domain_id:08x}:{p.pci_bus_id:02x}:{p.pci_device_id:02x}.0"]
+    except AttributeError:  # older torch without the PCI fields
+        return []
+
+
+def smi(query, target=()):
+    out = subprocess.run([sysbin.nvidia_smi(), *target, f"--query-gpu={query}", "--format=csv,noheader,nounits"],
                          capture_output=True, text=True)
     return out.stdout.strip().splitlines()[0] if out.stdout.strip() else ""
 
@@ -88,7 +101,7 @@ def sample_under_load(torch, op):
     while time.perf_counter() < end:
         op()
         torch.cuda.synchronize()
-    proc = subprocess.Popen([sysbin.nvidia_smi(), "--query-gpu=clocks.sm,power.draw,clocks_event_reasons.sw_power_cap",
+    proc = subprocess.Popen([sysbin.nvidia_smi(), *smi_target(torch), "--query-gpu=clocks.sm,power.draw,clocks_event_reasons.sw_power_cap",
                              "--format=csv,noheader,nounits"], stdout=subprocess.PIPE, text=True)
     while proc.poll() is None:
         op()
@@ -155,11 +168,12 @@ def bench(label, out_dir, passes=2, log=print):
     torch = _torch()
     props = torch.cuda.get_device_properties(0)
     cc = (props.major, props.minor)
+    target = smi_target(torch)
     cases = [c for c in CASES if c[2] != "fp8" or has_fp8(torch)]
     dtypes = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16, "fp8": "fp8"}
     result = {"label": label, "time": time.strftime("%Y-%m-%d %H:%M:%S"), "torch": torch.__version__,
-              "cuda": torch.version.cuda, "device": torch.cuda.get_device_name(0), "driver": smi("driver_version"),
-              "power_limit_w": smi("power.limit"), "sms": props.multi_processor_count,
+              "cuda": torch.version.cuda, "device": torch.cuda.get_device_name(0), "driver": smi("driver_version", target),
+              "power_limit_w": smi("power.limit", target), "sms": props.multi_processor_count,
               "cc": f"{cc[0]}.{cc[1]}", "rows": []}
     log(f"{result['device']}  torch {result['torch']}  driver {result['driver']}  power limit {result['power_limit_w']} W")
     for p in range(1, passes + 1):

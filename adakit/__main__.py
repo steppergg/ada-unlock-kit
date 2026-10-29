@@ -34,17 +34,24 @@ def cmd_stick(a):
     letter = stick.normalize(a.drive)
     info = stick.drive_info(letter)
     stick.check_drive(info, letter)
+    stick.check_source(a.source)  # fail before asking, not after
+    if not a.other_pc:
+        problem = stick.gpu_family_problem(winsys.gather()["nvidia_gpus"])
+        if problem:
+            raise stick.StickError(problem)
+    warnings = stick.asset_warnings({n: Path(a.source) / n for n in stick.KNOWN_ASSETS})
+    for w in warnings:
+        print(f"  [warn] {w}")
     print(f"{letter} {info.get('label') or ''} | {info.get('model')} | FAT32 | {int(info['free']) // 2**20} MiB free")
     if not a.yes:
         try:
-            ok = input(f"Copy the unlock files to {letter}? Existing kit files are replaced, BOOTX64.EFI is backed up. [y/N] ")
+            ok = input(f"Copy the unlock files to {letter}?{' The files above differ from the known-good build.' if warnings else ''} "
+                       "Existing kit files are replaced, BOOTX64.EFI is backed up. [y/N] ")
         except EOFError:
             ok = ""
         if ok.strip().lower() != "y":
             print("Nothing written.")
             return 1
-    for w in stick.asset_warnings({n: Path(a.source) / n for n in stick.KNOWN_ASSETS}):
-        print(f"  [warn] {w}")
     manifest, (mode, armed) = stick.build(a.source, letter, unlock=a.unlock)
     for rel, meta in manifest["files"].items():
         print(f"  {rel:<36}{meta['bytes']:>10} bytes  {meta['sha256'][:16]}...")
@@ -104,7 +111,7 @@ def show_status(letter=None):
         else:
             what = "no transaction result in the log"
         print(f"Last run   {clock(run['time'])}  {what}")
-        for e in run["errors"]:
+        for e in run["errors"] + run.get("reasons", []):
             print(f"           {e}")
     else:
         print("Last run   no loader.log on the stick yet")
@@ -175,6 +182,7 @@ def main(argv=None):
     s.add_argument("--source", default="usbroot", help="folder made by upstream make-usbroot.ps1")
     s.add_argument("--unlock", action="store_true", help="write in unlock mode (default: replay)")
     s.add_argument("--yes", action="store_true")
+    s.add_argument("--other-pc", action="store_true", help="skip the RTX 40 check (stick for a different PC)")
     st = sub.add_parser("status", help="did this boot come from the stick? last loader run, boot order")
     st.add_argument("drive", nargs="?")
     m = sub.add_parser("mode", help="switch a kit stick between replay and unlock")

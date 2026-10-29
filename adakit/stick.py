@@ -120,6 +120,22 @@ def check_source(src):
     return plan
 
 
+ADA_IDS = range(0x2600, 0x2900)  # upstream main.rs: 0x2600..=0x28ff -> "ad102"
+
+
+def gpu_family_problem(nvidia_gpus):
+    """Why this stick would do nothing on this PC, or None. The kit lays out
+    only the AD102-family files; the loader routes RTX 30 cards to "ga102"
+    and would log "assets missing - skipping". No NVIDIA GPU found (no
+    driver, or a stick made on another PC) is not a refusal."""
+    if not nvidia_gpus or any(int(g["device"], 16) in ADA_IDS for g in nvidia_gpus):
+        return None
+    names = ", ".join(f"{g.get('name')} [10de:{g['device']}]" for g in nvidia_gpus)
+    return (f"No RTX 40-series GPU here ({names}). The kit only lays out the RTX 40 (AD102-family) files so far; "
+            "for RTX 30 cards copy upstream's make-usbroot.ps1 output by hand. "
+            "Making a stick for a different PC? Add --other-pc.")
+
+
 def asset_warnings(files):
     """files: {name: path}. Names whose content differs from the known-good
     extraction. A warning, not a refusal: a newer upstream may change them."""
@@ -285,6 +301,10 @@ def find_sticks():
             and any((Path(d.strip() + "\\") / n).exists() for n in (PAYLOAD, PAYLOAD + ".off", "loader.log"))]
 
 
+# The loader's "this card was not unlocked, and why" lines (loader/src/main.rs).
+REFUSAL = re.compile(r"TX: (?:refused|aborted|assets missing)|has no asset family mapping|present but unreadable")
+
+
 def last_run(root):
     """What the loader logged on its last run, from loader.log on the stick."""
     log = Path(root) / "loader.log"
@@ -301,6 +321,10 @@ def last_run(root):
         "chained": "CHAIN: LoadImage" in text,
         "aborted": bool(re.search(r"CONFIRM: .* - ABORT", text)),
         "errors": [l.strip() for l in text.splitlines() if "[ERROR]" in l][-3:],
+        # The loader logs refusals at INFO; without these a run that skipped
+        # the card shows up as "no transaction result" with no reason.
+        "reasons": [l.split("] ", 1)[-1].strip() for l in text.splitlines()
+                    if REFUSAL.search(l)][-3:],
     }
 
 

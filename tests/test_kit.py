@@ -121,6 +121,13 @@ class Verdict(unittest.TestCase):
     def test_unknown_generation(self):
         self.assertEqual(bench.verdict(None)[0], "unknown")
 
+    def test_ampere_peak_matches_whitepaper(self):
+        # RTX 3070: 81.3 TFLOPS FP16 dense, 40.6 with FP32 accumulate at
+        # 46 SMs x 1.725 GHz. A stock 3070 must not read as unlocked.
+        row = {"median": 40.6, "clock_mhz": 1725}
+        self.assertEqual(bench.state_of(row, 46, (8, 6))[1], "stock")
+        self.assertEqual(bench.state_of(dict(row, median=78.0), 46, (8, 6))[1], "unlocked")
+
 
 class Stick(unittest.TestCase):
     def setUp(self):
@@ -218,6 +225,24 @@ class Stick(unittest.TestCase):
         self.assertFalse(stick.came_from_stick(1000, 900))
         self.assertIsNone(stick.came_from_stick(None, 1000))
 
+    def test_refusal_reasons_surface(self):
+        (self.dst / "loader.log").write_text(
+            "[INFO ] loader: CONFIRM: \\i_know_what_i_am_doing.txt present - ARMED: 5s countdown auto-runs, ANY key aborts\n"
+            "[INFO ] loader::tx_fwsec: layout: MMU_PLM PLM-locked on Turing (0xbadf5040) - skipping the lock-bit sanity check\n"
+            "[INFO ] loader: TX: assets missing for family 'ga102' (booter_load_*/gsp_boot_*/fwimage_*/fwsignature_*) - skipping\n")
+        r = stick.last_run(self.dst)
+        self.assertEqual(len(r["reasons"]), 1)
+        self.assertIn("assets missing for family 'ga102'", r["reasons"][0])
+        self.assertIsNone(r["unlocked"])
+
+    def test_gpu_family_check(self):
+        ada = {"device": "2803", "name": "RTX 4060 Ti"}
+        ampere = {"device": "2484", "name": "RTX 3070"}
+        self.assertIsNone(stick.gpu_family_problem([ada]))
+        self.assertIsNone(stick.gpu_family_problem([ampere, ada]))
+        self.assertIsNone(stick.gpu_family_problem([]))  # no driver / other PC
+        self.assertIn("10de:2484", stick.gpu_family_problem([ampere]))
+
     def test_manifest_cannot_point_outside_stick(self):
         stick.build(self.src, "F:", root_override=self.dst)
         mf = self.dst / stick.MANIFEST
@@ -285,6 +310,14 @@ class Report(unittest.TestCase):
             e = json.loads(Path(d, "out", "entry.json").read_text())
             self.assertEqual((e["fp16_gain_pct"], e["result"]), (70, "unlocked"))
             self.assertIn("| FP16 8192³ | 48.06 | 81.94 | +70% |", Path(d, "out", "report.md").read_text(encoding="utf-8"))
+
+    def test_no_shared_cases_is_a_clear_error(self):
+        with tempfile.TemporaryDirectory() as d:
+            s, u = Path(d, "result-stock.json"), Path(d, "result-unlocked.json")
+            s.write_text(json.dumps(dict(result("stock", 48.0), rows=[])))
+            u.write_text(json.dumps(result("unlocked", 81.0)))
+            with self.assertRaises(SystemExit):
+                report.build(s, u, Path(d, "out"))
 
     def test_mislabelled_run_flagged(self):
         sr, ur = result("stock", 81.0), result("unlocked", 81.0)
