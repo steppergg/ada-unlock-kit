@@ -2,6 +2,7 @@
 
   python -m adakit check                      is this PC a candidate? (read-only)
   python -m adakit stick F: --source usbroot  copy a verified stick (replay mode)
+  python -m adakit status [F:]                did this boot come from the stick? last loader run
   python -m adakit mode F: unlock|replay|disarm|status
   python -m adakit verify                     am I unlocked right now?
   python -m adakit bench stock                matched benchmark, saved to results/
@@ -11,6 +12,7 @@
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 
 from . import bench, check, report, stick, winsys
@@ -34,7 +36,10 @@ def cmd_stick(a):
     stick.check_drive(info, letter)
     print(f"{letter} {info.get('label') or ''} | {info.get('model')} | FAT32 | {int(info['free']) // 2**20} MiB free")
     if not a.yes:
-        ok = input(f"Copy the unlock files to {letter}? Existing kit files are replaced, BOOTX64.EFI is backed up. [y/N] ")
+        try:
+            ok = input(f"Copy the unlock files to {letter}? Existing kit files are replaced, BOOTX64.EFI is backed up. [y/N] ")
+        except EOFError:
+            ok = ""
         if ok.strip().lower() != "y":
             print("Nothing written.")
             return 1
@@ -51,18 +56,70 @@ def cmd_mode(a):
     stick.check_drive(stick.drive_info(letter), letter)
     root = Path(letter + "\\")
     if a.mode == "status":
-        mode, armed = stick.stick_mode(root)
-        problems = stick.verify(root)
-        order = stick.boot_order_warning()
-        if order:
-            problems.append(order)
-    else:
-        mode, armed = stick.set_mode(root, a.mode)
-        problems = []
+        return show_status(letter)
+    mode, armed = stick.set_mode(root, a.mode)
     print(f"{letter} mode: {mode}{' | ARMED: auto-runs after 5 s' if armed else ''}")
-    for p in problems:
-        print(f"  [warn] {p}")
     return 0
+
+
+def clock(t):
+    return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(t))
+
+
+def stick_session():
+    """(drive, last_run, came_from_stick) for the first stick found."""
+    drives = stick.find_sticks()
+    if not drives:
+        return None, None, None
+    run = stick.last_run(drives[0] + "\\")
+    via = stick.came_from_stick(run["time"] if run else None, winsys.last_boot())
+    return drives[0], run, via
+
+
+def show_status(letter=None):
+    boot = winsys.last_boot()
+    drives = [letter] if letter else stick.find_sticks()
+    if not drives:
+        print(r"No unlock stick found (a FAT32 drive with \EFI\BOOT\BOOTX64.EFI and the payload or loader.log).")
+        print(f"This boot  {clock(boot) if boot else '?'}  (run `adakit verify` to measure the current state)")
+        return 1
+    d = drives[0]
+    root = Path(d + "\\")
+    mode, armed = stick.stick_mode(root)
+    run = stick.last_run(root)
+    ver = f"nv-uefi-unlocker {run['version']}" + (f" (built {run['built']})" if run and run.get("built") else "") if run and run.get("version") else "loader version unknown"
+    print(f"Stick      {d}  {ver} | mode {mode}{' | ARMED: auto-runs after 5 s' if armed else ''}")
+    if run:
+        if run["aborted"]:
+            what = "aborted at the confirm screen, nothing unlocked"
+        elif run["unlocked"]:
+            what = "unlocked" + (", handed off to Windows" if run["chained"] else ", did NOT reach Windows handoff")
+        elif run["unlocked"] is False:
+            what = "ran without unlocking (replay mode?)"
+        else:
+            what = "no transaction result in the log"
+        print(f"Last run   {clock(run['time'])}  {what}")
+        for e in run["errors"]:
+            print(f"           {e}")
+    else:
+        print("Last run   no loader.log on the stick yet")
+    via = stick.came_from_stick(run["time"] if run else None, boot)
+    if boot:
+        verdict = {True: "came from the stick", False: "did NOT come from the stick: expect stock rate", None: ""}[via]
+        if via and run and run["unlocked"] is False:
+            verdict = "came from the stick, but that run didn't unlock"
+        print(f"This boot  {clock(boot)}  {verdict}")
+    for p in stick.verify(root):
+        print(f"  [warn] {p}")
+    order = stick.boot_order_warning()
+    if order:
+        print(f"  [warn] {order}")
+    print("Run `adakit verify` to measure the current state.")
+    return 0
+
+
+def cmd_status(a):
+    return show_status(stick.normalize(a.drive) if a.drive else None)
 
 
 def cmd_verify(a):
@@ -81,6 +138,10 @@ def cmd_verify(a):
 def cmd_bench(a):
     out = bench.bench(a.label, a.out)
     facts = winsys.gather()
+    drive, run, via = stick_session()
+    facts["boot_via_stick"] = via
+    if via and run and run.get("version"):
+        facts["loader"] = f"nv-uefi-unlocker {run['version']}"
     (Path(a.out) / f"facts-{a.label}.json").write_text(json.dumps(facts, indent=2))
     print(f"Saved {out}")
     return 0
@@ -100,7 +161,7 @@ def cmd_report(a):
 
 
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="adakit", description="Windows helper for nv-uefi-unlocker on RTX 40-series cards.")
+    p = argparse.ArgumentParser(prog="adakit", description="Windows helper for nv-uefi-unlocker (RTX 40 and 30 series).")
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("check", help="read-only: is this PC a candidate?")
     c.add_argument("--json", action="store_true")
@@ -109,6 +170,8 @@ def main(argv=None):
     s.add_argument("--source", default="usbroot", help="folder made by upstream make-usbroot.ps1")
     s.add_argument("--unlock", action="store_true", help="write in unlock mode (default: replay)")
     s.add_argument("--yes", action="store_true")
+    st = sub.add_parser("status", help="did this boot come from the stick? last loader run, boot order")
+    st.add_argument("drive", nargs="?")
     m = sub.add_parser("mode", help="switch a kit stick between replay and unlock")
     m.add_argument("drive")
     m.add_argument("mode", choices=["status", "replay", "unlock", "disarm"])
@@ -124,7 +187,7 @@ def main(argv=None):
     r.add_argument("--loader", help="loader version, e.g. 'nv-uefi-unlocker v2.1.5'")
     a = p.parse_args(argv)
     try:
-        return {"check": cmd_check, "stick": cmd_stick, "mode": cmd_mode, "verify": cmd_verify,
+        return {"check": cmd_check, "stick": cmd_stick, "mode": cmd_mode, "status": cmd_status, "verify": cmd_verify,
                 "bench": cmd_bench, "report": cmd_report}[a.cmd](a)
     except stick.StickError as e:
         print(f"[STOP] {e}", file=sys.stderr)

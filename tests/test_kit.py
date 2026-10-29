@@ -139,6 +139,46 @@ class Stick(unittest.TestCase):
         (self.dst / "scrubber_ad10x.bin").write_bytes(b"changed")
         self.assertIn("changed scrubber_ad10x.bin", stick.verify(self.dst))
 
+    def test_bad_payload_never_switched_on(self):
+        stick.build(self.src, "F:", root_override=self.dst)
+        (self.dst / (stick.PAYLOAD + ".off")).write_bytes(b"\x01" * stick.PAYLOAD_BYTES)
+        with self.assertRaises(stick.StickError):
+            stick.set_mode(self.dst, "unlock")
+        self.assertEqual(stick.stick_mode(self.dst)[0], "replay")
+
+    def test_unlock_with_both_files_and_double_disarm(self):
+        stick.build(self.src, "F:", root_override=self.dst, unlock=True)
+        self.assertFalse((self.dst / (stick.PAYLOAD + ".off")).exists())
+        (self.dst / (stick.PAYLOAD + ".off")).write_bytes((self.dst / stick.PAYLOAD).read_bytes())
+        self.assertEqual(stick.set_mode(self.dst, "unlock")[0], "unlock")
+        self.assertFalse((self.dst / (stick.PAYLOAD + ".off")).exists())
+        for _ in range(2):
+            (self.dst / stick.ARMED).write_text("")
+            self.assertFalse(stick.set_mode(self.dst, "disarm")[1])
+
+    def test_not_enough_space(self):
+        with mock.patch.object(stick.shutil, "disk_usage", return_value=mock.Mock(free=1000)):
+            with self.assertRaises(stick.StickError):
+                stick.build(self.src, "F:", root_override=self.dst)
+
+    def test_uas_usb_ssd_accepted(self):
+        stick.check_drive({"exists": True, "system": False, "bus": "SCSI", "pnp": "USBSTOR\\DISK&VEN_SAMSUNG", "fs": "FAT32"}, "F:")
+
+    def test_last_run_and_session(self):
+        log = self.dst / "loader.log"
+        log.write_text("[INFO ] loader::banner:  nv-uefi-unlocker v2.1.5 (built Wed 2026-10-28 15:37:01 -04:00)\n"
+                       "[INFO ] loader: CONFIRM: \\i_know_what_i_am_doing.txt present - ARMED: 5s countdown auto-runs, ANY key aborts\n"
+                       "[INFO ] loader::tx: HANDOFF-OUT: ss0=0x88888888 ss1=0x8 readout1=0x00000000\n"
+                       "[INFO ] loader::chainload: CHAIN: LoadImage (FromDevicePath)\n")
+        r = stick.last_run(self.dst)
+        self.assertEqual((r["version"], r["unlocked"], r["chained"], r["aborted"]), ("v2.1.5", True, True, False))
+        log.write_text("CONFIRM: 30s timeout - ABORT to Windows, NOTHING was unlocked this boot (zero GPU writes)\n")
+        self.assertTrue(stick.last_run(self.dst)["aborted"])
+        self.assertTrue(stick.came_from_stick(1000, 1012))
+        self.assertFalse(stick.came_from_stick(1000, 1000 + 7 * 60))
+        self.assertFalse(stick.came_from_stick(1000, 900))
+        self.assertIsNone(stick.came_from_stick(None, 1000))
+
     def test_first_boot_entry(self):
         bcd = ("Firmware Boot Manager\n---------------------\nidentifier              {fwbootmgr}\n"
                "displayorder            {bootmgr}\n                        {f8d10c35}\ntimeout                 1\n\n"
@@ -185,6 +225,24 @@ class Report(unittest.TestCase):
             e = json.loads(Path(d, "out", "entry.json").read_text())
             self.assertEqual((e["fp16_gain_pct"], e["result"]), (70, "unlocked"))
             self.assertIn("| FP16 8192³ | 48.06 | 81.94 | +70% |", Path(d, "out", "report.md").read_text(encoding="utf-8"))
+
+    def test_mislabelled_run_flagged(self):
+        sr, ur = result("stock", 81.0), result("unlocked", 81.0)
+        sr.update(state="unlocked", efficiency=0.83)
+        ur.update(state="unlocked", efficiency=0.83)
+        sb = {(r["case"], r["n"]): r for r in sr["rows"]}
+        notes = report.fairness(sr, ur, sb, sb)
+        self.assertTrue(any("labelled stock measured as unlocked" in n for n in notes))
+
+    def test_pick_gpu_and_state(self):
+        f = facts(nvidia_gpus=[{"device": "2b85", "name": "NVIDIA GeForce RTX 5090"},
+                               {"device": "2803", "name": "NVIDIA GeForce RTX 4060 Ti"}])
+        self.assertEqual(report.pick_gpu(f, "NVIDIA GeForce RTX 4060 Ti")["device"], "2803")
+        row = {"median": 76.45, "clock_mhz": 2340.0}
+        eff, state = bench.state_of(row, 34, (8, 9))
+        self.assertEqual(state, "unlocked")
+        self.assertEqual(bench.state_of({"median": 46.72, "clock_mhz": 2775.0}, 34, (8, 9))[1], "stock")
+        self.assertEqual(bench.state_of(row, 34, (7, 5)), (None, None))
 
     def test_unfair_comparison_flagged(self):
         sr = result("stock", 46.7, fp32=12.0, pl="160.00")

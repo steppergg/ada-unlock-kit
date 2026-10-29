@@ -54,7 +54,7 @@ $part = $ld | Get-CimAssociatedInstance -ResultClassName Win32_DiskPartition
 $disk = $part | Get-CimAssociatedInstance -ResultClassName Win32_DiskDrive | Select-Object -First 1
 [pscustomobject]@{{
   exists = [bool]$ld; fs = $ld.FileSystem; label = $ld.VolumeName; size = $ld.Size; free = $ld.FreeSpace
-  drive_type = $ld.DriveType; bus = $disk.InterfaceType; media = $disk.MediaType; model = $disk.Model
+  drive_type = $ld.DriveType; bus = $disk.InterfaceType; pnp = $disk.PNPDeviceID; media = $disk.MediaType; model = $disk.Model
   system = ($env:SystemDrive -eq '{letter}')
 }} | ConvertTo-Json -Compress
 """
@@ -72,11 +72,11 @@ def check_drive(info, letter):
         raise StickError(f"{letter} doesn't exist.")
     if info.get("system"):
         raise StickError(f"{letter} is the Windows system drive.")
-    if (info.get("bus") or "").upper() != "USB":
+    if (info.get("bus") or "").upper() != "USB" and "USB" not in (info.get("pnp") or "").upper():
         raise StickError(f"{letter} isn't on a USB disk (bus: {info.get('bus') or 'unknown'}). The kit only writes to USB sticks.")
     if (info.get("fs") or "").upper() != "FAT32":
         raise StickError(f"{letter} is {info.get('fs') or 'unformatted'}, not FAT32. Firmware can only boot FAT32. "
-                         "Format a partition as FAT32 yourself (about 100 MB is enough) and run this again.")
+                         "Format a partition as FAT32 yourself (128 MB or more) and run this again.")
 
 
 def normalize(letter):
@@ -122,6 +122,11 @@ def build(src, letter, unlock=False, root_override=None):
     """Copy, verify and record. root_override is for tests (a temp dir)."""
     plan = check_source(src)
     root = Path(root_override) if root_override else Path(letter + "\\")
+    need = sum(p.stat().st_size for p in plan.values())
+    have = shutil.disk_usage(root).free + sum((root / r).stat().st_size for r in plan if (root / r).exists())
+    if have < need + (1 << 20):
+        raise StickError(f"{letter} needs {need // 2**20 + 1} MiB free for the unlock files and has {have // 2**20} MiB. "
+                         "Use a FAT32 partition of at least 128 MB.")
     stamp = time.strftime("%Y%m%d-%H%M%S")
     efi_dst = root / EFI_REL
     if efi_dst.exists():
@@ -130,9 +135,11 @@ def build(src, letter, unlock=False, root_override=None):
     files = {}
     for rel, src_path in plan.items():
         dst = root / rel
-        if rel == PAYLOAD and not unlock:
-            dst = root / (PAYLOAD + ".off")
-            (root / PAYLOAD).unlink(missing_ok=True)
+        if rel == PAYLOAD:
+            stale = root / (PAYLOAD if not unlock else PAYLOAD + ".off")
+            stale.unlink(missing_ok=True)
+            if not unlock:
+                dst = root / (PAYLOAD + ".off")
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src_path, dst)
         want, got = sha256(src_path), sha256(dst)
@@ -149,20 +156,22 @@ def set_mode(root, mode):
     root = Path(root)
     on, off = root / PAYLOAD, root / (PAYLOAD + ".off")
     if mode == "unlock":
-        if off.exists():
-            off.rename(on)
-        if not on.exists():
+        cand = on if on.exists() else off
+        if not cand.exists():
             raise StickError("No payload on the stick. Rebuild it with `adakit stick`.")
-        if on.stat().st_size != PAYLOAD_BYTES or sha256(on) != PAYLOAD_SHA256:
-            raise StickError("The payload on the stick doesn't match the pinned hash. Rebuild the stick.")
+        if cand.stat().st_size != PAYLOAD_BYTES or sha256(cand) != PAYLOAD_SHA256:
+            raise StickError("The payload on the stick doesn't match the pinned hash. Nothing changed; rebuild the stick.")
+        if cand == off:
+            off.replace(on)
+        else:
+            off.unlink(missing_ok=True)
     elif mode == "replay":
         if on.exists():
-            off.unlink(missing_ok=True)
-            on.rename(off)
+            on.replace(off)
     elif mode == "disarm":
         armed = root / ARMED
         if armed.exists():
-            armed.rename(root / (ARMED + ".off"))
+            armed.replace(root / (ARMED + ".off"))
     return stick_mode(root)
 
 
@@ -230,3 +239,42 @@ def verify(root):
         elif sha256(p) != meta["sha256"]:
             problems.append(f"changed {rel}")
     return problems
+
+
+def find_sticks():
+    """Drive letters of FAT32 volumes that hold a loader: candidates for
+    `adakit status` when no drive is given."""
+    script = ("Get-CimInstance Win32_LogicalDisk | Where-Object { $_.FileSystem -eq 'FAT32' } | "
+              "ForEach-Object { $_.DeviceID }")
+    out = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", script],
+                         capture_output=True, text=True)
+    return [d.strip() for d in out.stdout.split() if d.strip()
+            and (Path(d.strip() + "\\") / EFI_REL).exists()
+            and any((Path(d.strip() + "\\") / n).exists() for n in (PAYLOAD, PAYLOAD + ".off", "loader.log"))]
+
+
+def last_run(root):
+    """What the loader logged on its last run, from loader.log on the stick."""
+    log = Path(root) / "loader.log"
+    if not log.exists():
+        return None
+    text = log.read_text(encoding="utf-8", errors="replace")
+    ver = re.search(r"nv-uefi-unlocker (v[\w.+-]+)(?: \(built ([^)]+)\))?", text)
+    hand = re.search(r"HANDOFF-OUT: ss0=(0x[0-9a-f]+) ss1=(0x[0-9a-f]+)", text)
+    return {
+        "time": log.stat().st_mtime,
+        "version": ver.group(1) if ver else None,
+        "built": ver.group(2) if ver and ver.group(2) else None,
+        "unlocked": None if not hand else (hand.group(1) == "0x88888888" and hand.group(2) == "0x8"),
+        "chained": "CHAIN: LoadImage" in text,
+        "aborted": bool(re.search(r"CONFIRM: .* - ABORT", text)),
+        "errors": [l.strip() for l in text.splitlines() if "[ERROR]" in l][-3:],
+    }
+
+
+def came_from_stick(log_time, boot_time, window_s=300):
+    """True when Windows started within window_s after the loader wrote its
+    log, i.e. this session was chain-loaded by the stick."""
+    if log_time is None or boot_time is None:
+        return None
+    return 0 <= boot_time - log_time <= window_s

@@ -115,6 +115,19 @@ CASES = [("FP32 (control)", 4096, "fp32", False), ("TF32", 4096, "fp32", True),
          ("BF16", 4096, "bf16", False), ("BF16", 8192, "bf16", False), ("FP8 e4m3", 8192, "fp8", False)]
 
 
+def has_fp8(torch):
+    return torch.cuda.get_device_capability(0) >= (8, 9)  # Ada and newer
+
+
+def state_of(row, sms, cc):
+    """Unlock state from the bench's own FP16 4096 row (same test as verify)."""
+    per_clk = FLOPS_PER_SM_CLK.get(cc)
+    if not per_clk or not row:
+        return None, None
+    eff = row["median"] / (sms * per_clk * row["clock_mhz"] * 1e6 / 1e12)
+    return round(eff, 3), verdict(eff)[0]
+
+
 def correctness(torch):
     worst = {}
     for name, dtype in (("fp16", torch.float16), ("bf16", torch.bfloat16)):
@@ -122,6 +135,8 @@ def correctness(torch):
         b = torch.randn(2048, 2048, device="cuda", dtype=dtype)
         got, ref = torch.mm(a, b).double(), torch.mm(a.double(), b.double())
         worst[name] = ((got - ref).abs().max() / ref.abs().max()).item()
+    if not has_fp8(torch):
+        return worst
     f8 = torch.float8_e4m3fn
     a8, b8 = torch.randn(2048, 2048, device="cuda").to(f8), torch.randn(2048, 2048, device="cuda").to(f8)
     one = torch.tensor(1.0, device="cuda")
@@ -133,13 +148,17 @@ def correctness(torch):
 
 def bench(label, out_dir, passes=2, log=print):
     torch = _torch()
+    props = torch.cuda.get_device_properties(0)
+    cc = (props.major, props.minor)
+    cases = [c for c in CASES if c[2] != "fp8" or has_fp8(torch)]
     dtypes = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16, "fp8": "fp8"}
     result = {"label": label, "time": time.strftime("%Y-%m-%d %H:%M:%S"), "torch": torch.__version__,
               "cuda": torch.version.cuda, "device": torch.cuda.get_device_name(0), "driver": smi("driver_version"),
-              "power_limit_w": smi("power.limit"), "rows": []}
+              "power_limit_w": smi("power.limit"), "sms": props.multi_processor_count,
+              "cc": f"{cc[0]}.{cc[1]}", "rows": []}
     log(f"{result['device']}  torch {result['torch']}  driver {result['driver']}  power limit {result['power_limit_w']} W")
     for p in range(1, passes + 1):
-        for name, n, dt, tf32 in CASES:
+        for name, n, dt, tf32 in cases:
             op = make_op(torch, n, dtypes[dt], tf32)
             med, lo, hi = timed(torch, op, n)
             clock, power, capped = sample_under_load(torch, op)
@@ -148,6 +167,9 @@ def bench(label, out_dir, passes=2, log=print):
                    "tflops_per_ghz": round(med / (clock / 1000.0), 2)}
             result["rows"].append(row)
             log(f"  {name:<15}{n:>6}  {med:8.2f} TFLOPS  {clock:.0f} MHz {power} W{'  power-capped' if capped else ''}  pass {p}")
+    fp16 = max((r for r in result["rows"] if r["case"] == "FP16" and r["n"] == 4096), key=lambda r: r["median"], default=None)
+    result["efficiency"], result["state"] = state_of(fp16, props.multi_processor_count, cc)
+    log(f"  state: {result['state']} (FP16 efficiency {result['efficiency']})")
     result["max_rel_error"] = correctness(torch)
     log(f"  max relative error vs FP64: " + ", ".join(f"{k} {v:.1e}" for k, v in result["max_rel_error"].items()))
     out = Path(out_dir) / f"result-{label}.json"

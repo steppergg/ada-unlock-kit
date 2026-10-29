@@ -8,6 +8,7 @@ The kit doesn't unlock anything itself and ships no firmware. It helps you:
 |---|---|---|
 | `check` | Reads your GPU, board, VBIOS, Secure Boot, BitLocker and Fast Startup state, and tells you what's known about your card from the issue trackers | No |
 | `stick F:` | Copies only the files the loader opens onto a FAT32 USB stick, puts `BOOTX64.EFI` in `\EFI\BOOT\`, verifies every copy by SHA-256, writes a manifest. Starts in **replay mode** | The USB stick only |
+| `status` | Did this boot come from the stick? Last loader run and version, boot-order warning | No |
 | `mode F: …` | Switches the stick between `replay` and `unlock`, shows `status`, or `disarm`s auto-run | The USB stick only |
 | `verify` | 10-second benchmark: is FP32-accumulate tensor math at full rate right now? | No |
 | `bench <label>` | The matched benchmark set used in community reports | `results\` |
@@ -19,20 +20,35 @@ The kit doesn't unlock anything itself and ships no firmware. It helps you:
 - For `verify`, `bench`: a CUDA build of PyTorch (`pip install torch --index-url https://download.pytorch.org/whl/cu128`)
 - For `stick`: the assets from upstream's `release\make-usbroot.ps1` (it downloads NVIDIA's pinned public packages and checks their hashes), and a `BOOTX64.EFI` you built or checked yourself
 
-## Typical run
+## Install
 
 ```powershell
-python -m adakit check
-python -m adakit bench stock                 # on a normal boot
-python -m adakit stick F: --source C:\path\to\usbroot
+git clone https://github.com/steppergg/ada-unlock-kit
+cd ada-unlock-kit
+pip install .
+```
+
+That gives you an `adakit` command. `verify` and `bench` also need a CUDA build of PyTorch (about 3 GB).
+
+## Typical run
+
+Run these from one folder: results go to `.\results`.
+
+```powershell
+adakit check
+adakit bench stock                 # on a normal boot
+adakit stick F: --source C:\path\to\usbroot
 # power off fully, boot the stick from the firmware boot menu (replay mode)
 # check F:\loader.log, then:
-python -m adakit mode F: unlock
+adakit mode F: unlock
 # power off fully, boot the stick again, let Windows start
-python -m adakit verify
-python -m adakit bench unlocked
-python -m adakit report results\result-stock.json results\result-unlocked.json --loader "nv-uefi-unlocker v2.1.5"
+adakit status                         # confirms this boot came from the stick
+adakit verify
+adakit bench unlocked
+adakit report results\result-stock.json results\result-unlocked.json
 ```
+
+`bench` notes whether the session came from the stick and which loader version ran, so the report fills in the loader and warns if a run labelled "stock" was actually unlocked (or the other way round).
 
 Post `results\report\report.md` and `chart.png` to an issue. Add `entry.json` to the Windows compatibility tracker.
 

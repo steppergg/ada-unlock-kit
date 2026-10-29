@@ -19,7 +19,7 @@
     "2702": {"name": "RTX 4080 SUPER", "chip": "AD103", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "TOTORONG-lineage UEFI ports worked on two boards.", "refs": ["ada#53", "ada#70", "ada#100"]},
     "2704": {"name": "RTX 4080", "chip": "AD103", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "TOTORONG AD103_win_unlocker reference card.", "refs": ["ada#48"]},
     "2705": {"name": "RTX 4070 Ti SUPER", "chip": "AD103", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "Per-board port worked on a second VBIOS; ComfyUI A/B +5.3%.", "refs": ["ada#39", "ada#92", "ada#112"]},
-    "2709": {"name": "RTX 4070 (AD103)", "chip": "AD103", "form": "desktop", "linux": "untested", "windows": "untested", "notes": "Listed in the nv-uefi-unlocker README.", "refs": ["nvuefi#8"]},
+    "2709": {"name": "RTX 4070 (newer SKU)", "chip": "Ada (die unconfirmed)", "form": "desktop", "linux": "untested", "windows": "untested", "notes": "Listed in the nv-uefi-unlocker README.", "refs": ["nvuefi#8"]},
     "2782": {"name": "RTX 4070 Ti", "chip": "AD104", "form": "desktop", "linux": "working", "windows": "port-only", "notes": "Latence.app MSI reference port and a Gigabyte port worked.", "refs": ["ada#77", "ada#107"]},
     "2783": {"name": "RTX 4070 SUPER", "chip": "AD104", "form": "desktop", "linux": "working", "windows": "working", "notes": "Generic loader v0.1.4 on a Palit card, MSI B760: FP16 GEMM 70.5 to 100.1 TFLOPS.", "refs": ["ada#33", "nvuefi#3"]},
     "2786": {"name": "RTX 4070", "chip": "AD104", "form": "desktop", "linux": "working", "windows": "untested", "notes": "", "refs": ["ada#33"]},

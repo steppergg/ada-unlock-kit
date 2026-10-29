@@ -42,6 +42,11 @@ def fairness(stock, unlocked, sb, ub):
         notes.append(f"Power limit changed ({stock['power_limit_w']} W vs {unlocked['power_limit_w']} W). Gains will mix the two effects.")
     if stock.get("torch") != unlocked.get("torch"):
         notes.append(f"PyTorch changed ({stock.get('torch')} vs {unlocked.get('torch')}).")
+    for run, want in ((stock, "stock"), (unlocked, "unlocked")):
+        got = run.get("state")
+        if got and got != want:
+            notes.append(f"The run labelled {want} measured as {got} (FP16 efficiency {run.get('efficiency')}). "
+                         "Check which boot each run came from before posting.")
     ctl = ("FP32 (control)", 4096)
     if ctl in sb and ctl in ub:
         drift = ub[ctl]["median"] / sb[ctl]["median"] - 1
@@ -57,7 +62,7 @@ def table(sb, ub):
             s, u = sb[key], ub[key]
             rows.append({"case": key[0], "n": key[1], "stock": s["median"], "unlocked": u["median"],
                          "gain": u["median"] / s["median"] - 1,
-                         "per_ghz": (s["tflops_per_ghz"], u["tflops_per_ghz"])})
+                         "per_ghz": (s.get("tflops_per_ghz"), u.get("tflops_per_ghz"))})
     return rows
 
 
@@ -109,9 +114,16 @@ def entry(facts, gpu, stock, rows, loader):
             "result": "unlocked" if (g(("FP16", 8192)) or 0) >= 30 else "no gain"}
 
 
+def pick_gpu(facts, device_name):
+    """The NVIDIA GPU the bench ran on (multi-GPU hosts list several)."""
+    gpus = (facts or {}).get("nvidia_gpus") or []
+    return next((g for g in gpus if g.get("name") == device_name), gpus[0] if gpus else {})
+
+
 def build(stock_path, unlocked_path, out_dir, facts=None, loader=None):
     stock, sb = load(stock_path)
     unlocked, ub = load(unlocked_path)
+    loader = loader or (facts or {}).get("loader")
     rows = table(sb, ub)
     notes = fairness(stock, unlocked, sb, ub)
     out = Path(out_dir)
@@ -119,15 +131,15 @@ def build(stock_path, unlocked_path, out_dir, facts=None, loader=None):
 
     md = [f"### {stock['device']}: matched stock / unlocked on Windows", ""]
     if facts:
-        gpu = facts["nvidia_gpus"][0] if facts["nvidia_gpus"] else {}
+        gpu = pick_gpu(facts, unlocked["device"])
         md += [f"- Card: `10de:{gpu.get('device')}`, subsystem `{gpu.get('subsystem')}`, VBIOS `{gpu.get('vbios')}`",
                f"- Board: {facts.get('board')} (BIOS {facts.get('bios')}), {facts.get('os')}"]
     md += [f"- Driver {stock['driver']}, PyTorch {stock['torch']}, power limit {stock['power_limit_w']} W",
            f"- Loader: {loader or 'not recorded'}", "",
            "| TFLOPS, cuBLAS | Stock | Unlocked | Gain | Per GHz stock → unlocked |", "|---|---:|---:|---:|---:|"]
     for r in rows:
-        md.append(f"| {r['case']} {r['n']}³ | {r['stock']:.2f} | {r['unlocked']:.2f} | {pct(r['gain'])} | "
-                  f"{r['per_ghz'][0]:.1f} → {r['per_ghz'][1]:.1f} |")
+        ghz = " → ".join(f"{x:.1f}" if x is not None else "n/a" for x in r["per_ghz"])
+        md.append(f"| {r['case']} {r['n']}³ | {r['stock']:.2f} | {r['unlocked']:.2f} | {pct(r['gain'])} | {ghz} |")
     err = unlocked.get("max_rel_error", {})
     md += ["", "Median of 20 GEMMs, best of 2 passes. Max relative error vs FP64 (unlocked): "
            + ", ".join(f"{k} {v:.1e}" for k, v in err.items()) + "."]
@@ -141,6 +153,6 @@ def build(stock_path, unlocked_path, out_dir, facts=None, loader=None):
     (out / "chart.html").write_text(html, encoding="utf-8")
     png = render_png(out / "chart.html", out / "chart.png", w, h)
 
-    if facts and facts["nvidia_gpus"]:
-        (out / "entry.json").write_text(json.dumps(entry(facts, facts["nvidia_gpus"][0], stock, rows, loader), indent=2))
+    if facts and facts.get("nvidia_gpus"):
+        (out / "entry.json").write_text(json.dumps(entry(facts, pick_gpu(facts, unlocked["device"]), stock, rows, loader), indent=2))
     return rows, notes, png

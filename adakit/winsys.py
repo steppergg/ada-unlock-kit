@@ -113,3 +113,12 @@ def gather():
         "bitlocker": bitlocker_state(info.get("bitlocker")),
         "os": f"{info.get('os') or 'Windows'} build {info.get('os_build') or '?'}",
     }
+
+
+def last_boot():
+    """Windows' last boot as a Unix timestamp, or None."""
+    out = powershell("[DateTimeOffset]::new((Get-CimInstance Win32_OperatingSystem).LastBootUpTime).ToUnixTimeSeconds()")
+    try:
+        return float(out)
+    except ValueError:
+        return None
