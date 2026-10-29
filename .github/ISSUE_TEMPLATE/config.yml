@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Loader bugs (nv-uefi-unlocker)
+    url: https://github.com/physicsdolphin/nv-uefi-unlocker/issues
+    about: Problems inside the UEFI loader itself belong upstream.
+  - name: Linux module results (gpu-unlock-ada)
+    url: https://github.com/JustAResearcher/gpu-unlock-ada/issues
+    about: Results from the Linux kernel module.

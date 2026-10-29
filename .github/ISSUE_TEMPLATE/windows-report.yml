@@ -1,0 +1,71 @@
+name: Windows unlock report
+description: Share a stock vs unlocked result from Windows, worked or not. Reports go into the Windows Unlock Tracker.
+title: "[Windows report] <card> on <board>"
+labels: ["report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Failed and no-gain results are just as useful as successes.
+        If you used the kit, `adakit report` writes everything below; paste `entry.json` at the bottom and you can skip the rest.
+  - type: input
+    id: card
+    attributes:
+      label: Card and device ID
+      placeholder: RTX 4060 Ti 8 GB, 10de:2803
+    validations:
+      required: true
+  - type: input
+    id: subsystem
+    attributes:
+      label: Subsystem and VBIOS
+      placeholder: 1043:88fb, 95.06.26.00.c0
+  - type: input
+    id: board
+    attributes:
+      label: Motherboard or laptop model, and BIOS version
+      placeholder: ASUS ROG MAXIMUS Z790 APEX, BIOS 3107
+    validations:
+      required: true
+  - type: dropdown
+    id: form
+    attributes:
+      label: Desktop or laptop
+      options: ["Desktop", "Laptop, MUX / dGPU-only mode", "Laptop, hybrid mode"]
+    validations:
+      required: true
+  - type: input
+    id: loader
+    attributes:
+      label: Loader and version
+      placeholder: nv-uefi-unlocker v2.1.5, or a per-board port (link)
+    validations:
+      required: true
+  - type: input
+    id: driver
+    attributes:
+      label: Windows version, NVIDIA driver, power limit
+      placeholder: Windows 11 26100, 581.42, 216 W
+  - type: dropdown
+    id: result
+    attributes:
+      label: Result
+      options: ["Unlocked", "Transaction ran, no speed-up", "Loader failed or aborted", "Machine reset or didn't boot"]
+    validations:
+      required: true
+  - type: textarea
+    id: numbers
+    attributes:
+      label: Stock vs unlocked numbers
+      description: Same card, driver and power limit in both runs. `adakit report` output or your own table.
+      render: markdown
+  - type: textarea
+    id: entry
+    attributes:
+      label: entry.json (if you used the kit)
+      render: json
+  - type: textarea
+    id: log
+    attributes:
+      label: loader.log (from the stick) or anything else
+      description: Attach the file or paste the last 40 lines.

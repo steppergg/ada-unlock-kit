@@ -52,6 +52,10 @@ adakit report results\result-stock.json results\result-unlocked.json
 
 Post `results\report\report.md` and `chart.png` to an issue. Add `entry.json` to the Windows compatibility tracker.
 
+## Share your result
+
+Open a [Windows unlock report](https://github.com/steppergg/ada-unlock-kit/issues/new?template=windows-report.yml) and paste the `entry.json` from `adakit report`, with `report.md`, `chart.png` and the stick's `loader.log` attached. Results that didn't work are just as useful. Reports are added to the Windows Unlock Tracker with `python tracker/build.py --add entry.json --refs ...`.
+
 ## Example output
 
 RTX 4060 Ti 8 GB (`10de:2803`) on an ASUS ROG MAXIMUS Z790 APEX, nv-uefi-unlocker v2.1.5, 216 W limit, same driver and PyTorch in both runs ([full report](docs/example/report.md)):

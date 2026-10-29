@@ -138,7 +138,7 @@ footer { color: var(--muted); font-size: 0.84rem; border-top: 1px solid var(--li
       <li><code>python -m adakit bench unlocked</code> after booting the stick</li>
       <li><code>python -m adakit report results\result-stock.json results\result-unlocked.json --loader "nv-uefi-unlocker vX"</code></li>
     </ol>
-    <p>Paste the <code>entry.json</code> it writes below. The page checks it and opens a GitHub issue with your numbers filled in; attach <code>report.md</code> and <code>chart.png</code> there. Nothing is sent until you submit on GitHub.</p>
+    <p>Paste the <code>entry.json</code> it writes below. The page checks it and opens a GitHub issue with your numbers filled in; attach <code>report.md</code> and <code>chart.png</code> there. Reports go to the <a href="https://github.com/steppergg/ada-unlock-kit/issues" target="_blank" rel="noopener">ada-unlock-kit issue tracker</a>. Nothing is sent until you submit on GitHub.</p>
     <label class="eyebrow" for="entry">entry.json</label>
     <textarea id="entry" spellcheck="false" placeholder='{ "card": "NVIDIA GeForce RTX 4060 Ti", "device_id": "10de:2803", ... }'></textarea>
     <div class="row">
@@ -160,7 +160,7 @@ footer { color: var(--muted); font-size: 0.84rem; border-top: 1px solid var(--li
   "use strict";
   var DATA = JSON.parse(document.getElementById("data").textContent);
   var SOURCES = { ada: "https://github.com/JustAResearcher/gpu-unlock-ada/issues/", nvuefi: "https://github.com/physicsdolphin/nv-uefi-unlocker/issues/" };
-  var ISSUE_REPO = "https://github.com/physicsdolphin/nv-uefi-unlocker/issues/new";
+  var ISSUE_REPO = "https://github.com/steppergg/ada-unlock-kit/issues/new";
   var state = { q: "", tool: "all", form: "all" };
 
   function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
