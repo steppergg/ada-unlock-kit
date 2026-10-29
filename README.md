@@ -52,6 +52,21 @@ adakit report results\result-stock.json results\result-unlocked.json
 
 Post `results\report\report.md` and `chart.png` to an issue. Add `entry.json` to the Windows compatibility tracker.
 
+## Example output
+
+RTX 4060 Ti 8 GB (`10de:2803`) on an ASUS ROG MAXIMUS Z790 APEX, nv-uefi-unlocker v2.1.5, 216 W limit, same driver and PyTorch in both runs ([full report](docs/example/report.md)):
+
+![Stock vs unlocked cuBLAS throughput](docs/example/chart.png)
+
+| | Stock | Unlocked | Gain | Per GHz |
+|---|---:|---:|---:|---:|
+| FP16 8192³ | 47.86 | 80.78 | +69% | 17.1 → 33.2 |
+| BF16 8192³ | 47.77 | 82.47 | +73% | 17.1 → 33.5 |
+| FP8 e4m3 8192³ | 93.15 | 148.17 | +59% | 33.4 → 62.5 |
+| FP32 (control) | 12.81 | 12.73 | −1% | |
+
+Per clock the unlock is close to 2×. The absolute gain is smaller because the unlocked card runs into its power limit (about 180 W here).
+
 ## How `verify` decides
 
 It times an FP16 GEMM with FP32 accumulate while sampling the SM clock under load, then divides by the card's full-rate peak at that clock: SMs × clock × 1024 flops (Ada) or 512 (Ampere). A stock card reads about 0.5 and an unlocked card 0.8 to 1.0 (lower end when it hits its power limit), whatever the clock. Measured on a 4060 Ti 8 GB: 0.48 stock, 0.83 unlocked at the power limit. It loads no kernel driver and needs no admin rights. For a register-level answer, upstream's `ssdiag` reads the selectors directly (it loads a signed kernel driver for the duration of the run).
