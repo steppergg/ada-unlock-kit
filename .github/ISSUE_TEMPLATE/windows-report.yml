@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting. Failed and no-gain results are just as useful as successes.
+        Thanks for reporting. Failed and no-gain results are just as useful as successes. Accepted reports are listed in the [Windows Unlock Tracker](https://claude.ai/artifact/4fMyfSGcTSTisYqXgPkUk5).
         If you used the kit, `adakit report` writes everything below; paste `entry.json` at the bottom and you can skip the rest.
   - type: input
     id: card

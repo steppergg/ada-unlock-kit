@@ -2,6 +2,8 @@
 
 A Windows helper for [nv-uefi-unlocker](https://github.com/physicsdolphin/nv-uefi-unlocker), the UEFI loader that unlocks full-rate FP16/BF16/TF32/FP8 tensor math with FP32 accumulate on RTX 40-series cards (and some RTX 30-series cards) before Windows starts.
 
+**[Windows Unlock Tracker](https://claude.ai/artifact/4fMyfSGcTSTisYqXgPkUk5)**: every public Windows report, with gains per card and board.
+
 The kit doesn't unlock anything itself and ships no firmware. It helps you:
 
 | Command | What it does | Writes anything? |
@@ -50,11 +52,11 @@ adakit report results\result-stock.json results\result-unlocked.json
 
 `bench` notes whether the session came from the stick and which loader version ran, so the report fills in the loader and warns if a run labelled "stock" was actually unlocked (or the other way round).
 
-Post `results\report\report.md` and `chart.png` to an issue. Add `entry.json` to the Windows compatibility tracker.
+Post `results\report\report.md` and `chart.png` to an issue. Add `entry.json` to the [Windows Unlock Tracker](https://claude.ai/artifact/4fMyfSGcTSTisYqXgPkUk5).
 
 ## Share your result
 
-Open a [Windows unlock report](https://github.com/steppergg/ada-unlock-kit/issues/new?template=windows-report.yml) and paste the `entry.json` from `adakit report`, with `report.md`, `chart.png` and the stick's `loader.log` attached. Results that didn't work are just as useful. Reports are added to the Windows Unlock Tracker with `python tracker/build.py --add entry.json --refs ...`.
+Open a [Windows unlock report](https://github.com/steppergg/ada-unlock-kit/issues/new?template=windows-report.yml) and paste the `entry.json` from `adakit report`, with `report.md`, `chart.png` and the stick's `loader.log` attached. Results that didn't work are just as useful. Reports are added to the [Windows Unlock Tracker](https://claude.ai/artifact/4fMyfSGcTSTisYqXgPkUk5) with `python tracker/build.py --add entry.json --refs ...`.
 
 ## Example output
 
