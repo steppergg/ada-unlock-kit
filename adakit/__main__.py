@@ -56,7 +56,9 @@ def cmd_stick(a):
     for rel, meta in manifest["files"].items():
         print(f"  {rel:<36}{meta['bytes']:>10} bytes  {meta['sha256'][:16]}...")
     print(f"Written and verified. Mode: {mode}{', ARMED (auto-runs)' if armed else ''}.")
-    print(f"Loader SHA-256 {manifest['loader_sha256']}: compare it with the build or release you trust.")
+    known = stick.KNOWN_LOADERS.get(manifest["loader_sha256"])
+    print(f"Loader SHA-256 {manifest['loader_sha256']}: " + (f"matches the official {known}." if known else
+          "not an official release binary the kit knows; compare it with the build you trust."))
     print("Next: power off fully, boot the stick from the firmware boot menu, and check \\loader.log on the stick afterwards.")
     return 0
 
@@ -68,7 +70,7 @@ def cmd_mode(a):
     if a.mode == "status":
         return show_status(letter)
     mode, armed = stick.set_mode(root, a.mode)
-    print(f"{letter} mode: {mode}{' | ARMED: auto-runs after 5 s' if armed else ''}")
+    print(f"{letter} mode: {mode}{' | ARMED: auto-runs after 5 s' if armed else ''} | reconnect: {stick.reconnect_mode(root)}")
     return 0
 
 
@@ -100,7 +102,10 @@ def show_status(letter=None):
     ver = f"nv-uefi-unlocker {run['version']}" + (f" (built {run['built']})" if run and run.get("built") else "") if run and run.get("version") else "loader version unknown"
     print(f"Stick      {d}  {ver} | mode {mode}{' | ARMED: auto-runs after 5 s' if armed else ''}")
     lh = stick.loader_hash(root)
-    print(f"Loader     BOOTX64.EFI sha256 {lh[:16]}..." if lh else r"Loader     no \EFI\BOOT\BOOTX64.EFI")
+    known = stick.KNOWN_LOADERS.get(lh) if lh else None
+    print((f"Loader     BOOTX64.EFI sha256 {lh[:16]}..." + (f" = official {known}" if known else " (own build or unknown)"))
+          if lh else r"Loader     no \EFI\BOOT\BOOTX64.EFI")
+    print(f"Reconnect  {stick.reconnect_mode(root)}")
     if run:
         if run["aborted"]:
             what = "aborted at the confirm screen, nothing unlocked"
@@ -113,6 +118,9 @@ def show_status(letter=None):
         print(f"Last run   {clock(run['time'])}  {what}")
         for e in run["errors"] + run.get("reasons", []):
             print(f"           {e}")
+        if run.get("hung_at_reconnect"):
+            print("           log stops inside the recursive GOP reconnect: the board hangs there (nvuefi #52/#61).")
+            print(f"           Fix (v2.1.6+): `adakit mode {d} reconnect-safe`, then power off fully and boot the stick again.")
     else:
         print("Last run   no loader.log on the stick yet")
     via = stick.came_from_stick(run["time"] if run else None, boot)
@@ -185,9 +193,9 @@ def main(argv=None):
     s.add_argument("--other-pc", action="store_true", help="skip the RTX 40 check (stick for a different PC)")
     st = sub.add_parser("status", help="did this boot come from the stick? last loader run, boot order")
     st.add_argument("drive", nargs="?")
-    m = sub.add_parser("mode", help="switch a kit stick between replay and unlock")
+    m = sub.add_parser("mode", help="switch a kit stick between replay and unlock; reconnect-safe for boards that hang after FLR")
     m.add_argument("drive")
-    m.add_argument("mode", choices=["status", "replay", "unlock", "disarm"])
+    m.add_argument("mode", choices=["status", "replay", "unlock", "disarm", "reconnect-safe", "reconnect-auto"])
     v = sub.add_parser("verify", help="benchmark check: is FP32-accumulate at full rate?")
     v.add_argument("--json", action="store_true")
     b = sub.add_parser("bench", help="matched benchmark set")

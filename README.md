@@ -11,7 +11,7 @@ The kit doesn't unlock anything itself and ships no firmware. It helps you:
 | `check` | Reads your GPU, board, VBIOS, Secure Boot, BitLocker and Fast Startup state, and tells you what's known about your card from the issue trackers | No |
 | `stick F:` | Copies only the files the loader opens onto a FAT32 USB stick, puts `BOOTX64.EFI` in `\EFI\BOOT\`, verifies every copy by SHA-256, writes a manifest. Starts in **replay mode**. RTX 40 only for now: it refuses when the PC has only RTX 30 cards (`--other-pc` to make a stick for another machine) | The USB stick only |
 | `status` | Did this boot come from the stick? Last loader run and version, boot-order warning | No |
-| `mode F: …` | Switches the stick between `replay` and `unlock`, shows `status`, or `disarm`s auto-run | The USB stick only |
+| `mode F: …` | Switches the stick between `replay` and `unlock`, shows `status`, `disarm`s auto-run, or turns on `reconnect-safe` for boards that hang after the unlock (`reconnect-auto` turns it off) | The USB stick only |
 | `verify` | 10-second benchmark: is FP32-accumulate tensor math at full rate right now? | No |
 | `bench <label>` | The matched benchmark set used in community reports | `results\` |
 | `report a.json b.json` | Stock vs unlocked table, per-GHz numbers, chart PNG, fairness checks, and a tracker entry | `results\report\` |
@@ -20,7 +20,7 @@ The kit doesn't unlock anything itself and ships no firmware. It helps you:
 
 - Windows 10 or 11, UEFI boot, Python 3.10+
 - For `verify`, `bench`: a CUDA build of PyTorch (`pip install torch --index-url https://download.pytorch.org/whl/cu128`)
-- For `stick`: the assets from upstream's `release\make-usbroot.ps1` (it downloads NVIDIA's pinned public packages and checks their hashes), and a `BOOTX64.EFI` you built or checked yourself
+- For `stick`: the assets from upstream's `release\make-usbroot.ps1` (it downloads NVIDIA's pinned public packages and checks their hashes), and a `BOOTX64.EFI` you built or checked yourself. Recommended: the [v2.1.6 release](https://github.com/physicsdolphin/nv-uefi-unlocker/releases/tag/v2.1.6) (SHA-256 `aa0c1148…12d7`); `stick` and `status` say when the stick holds that exact binary
 
 ## Install
 
@@ -51,6 +51,8 @@ adakit report results\result-stock.json results\result-unlocked.json
 ```
 
 `bench` notes whether the session came from the stick and which loader version ran, so the report fills in the loader and warns if a run labelled "stock" was actually unlocked (or the other way round).
+
+**Black screen or reset after the unlock?** If `adakit status` says the log stops inside the recursive GOP reconnect, your board deadlocks there (upstream #52, #61). With loader v2.1.6 or newer run `adakit mode F: reconnect-safe` and boot the stick again: the loader then binds only the NVIDIA GOP and leaves the console to Windows. Recovery from a hang is a full power-off.
 
 Post `results\report\report.md` and `chart.png` to an issue. Add `entry.json` to the [Windows Unlock Tracker](https://claude.ai/artifact/4fMyfSGcTSTisYqXgPkUk5).
 

@@ -225,6 +225,32 @@ class Stick(unittest.TestCase):
         self.assertFalse(stick.came_from_stick(1000, 900))
         self.assertIsNone(stick.came_from_stick(None, 1000))
 
+    def test_reconnect_hang_detected(self):
+        log = self.dst / "loader.log"
+        head = "[INFO ] loader::tx: POST-FLR: verified\n"
+        log.write_text(head + "[INFO ] loader::tx_detach: RECONNECT: ConnectController (recursive=true) begin\n")
+        self.assertTrue(stick.last_run(self.dst)["hung_at_reconnect"])
+        log.write_text(head + "[INFO ] loader::tx_detach: RECONNECT: ConnectController (recursive=false) begin\n"
+                       "[INFO ] loader::tx_detach: RECONNECT: ConnectController ok (recursive=false)\n"
+                       "[INFO ] loader::chainload: CHAIN: LoadImage (FromDevicePath)\n")
+        self.assertFalse(stick.last_run(self.dst)["hung_at_reconnect"])
+        log.write_text(head)
+        self.assertFalse(stick.last_run(self.dst)["hung_at_reconnect"])
+
+    def test_reconnect_markers(self):
+        stick.build(self.src, "F:", root_override=self.dst)
+        self.assertEqual(stick.reconnect_mode(self.dst), "auto")
+        stick.set_mode(self.dst, "reconnect-safe")
+        self.assertTrue((self.dst / stick.NONREC).read_text().strip())  # non-empty, any loader reads it
+        self.assertIn("non-recursive", stick.reconnect_mode(self.dst))
+        (self.dst / stick.NORECONNECT).write_text("")
+        self.assertIn("Code 12", stick.reconnect_mode(self.dst))  # the skip marker wins upstream too
+        (self.dst / stick.NORECONNECT).unlink()
+        stick.set_mode(self.dst, "reconnect-auto")
+        stick.set_mode(self.dst, "reconnect-auto")
+        self.assertEqual(stick.reconnect_mode(self.dst), "auto")
+        self.assertEqual(stick.verify(self.dst), [])
+
     def test_refusal_reasons_surface(self):
         (self.dst / "loader.log").write_text(
             "[INFO ] loader: CONFIRM: \\i_know_what_i_am_doing.txt present - ARMED: 5s countdown auto-runs, ANY key aborts\n"

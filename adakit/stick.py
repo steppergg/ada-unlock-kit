@@ -43,6 +43,15 @@ KNOWN_ASSETS = {
 EFI_REL = "EFI/BOOT/BOOTX64.EFI"
 ARMED = "i_know_what_i_am_doing.txt"
 MANIFEST = "ADAKIT-MANIFEST.json"
+# Reconnect markers (loader/src/tx_detach.rs). v2.1.6+: NONREC forces the
+# vendor-GOP-only reconnect for boards that hang inside the recursive one.
+# NORECONNECT wins over it and skips the reconnect (Code 12 risk, #35/#61).
+NONREC = "tx-reconnect-nonrecursive.txt"
+NORECONNECT = "no-reconnect.txt"
+# Official upstream release binaries, so `stick` and `status` can name them.
+KNOWN_LOADERS = {
+    "aa0c11485c152a6dc7b76a0f300e51e19e2942d22e5716ae6a79d0fe0a3612d7": "nv-uefi-unlocker v2.1.6 release",
+}
 
 
 class StickError(Exception):
@@ -161,6 +170,15 @@ def stick_mode(root):
     return mode, (root / ARMED).exists()
 
 
+def reconnect_mode(root):
+    root = Path(root)
+    if (root / NORECONNECT).exists():
+        return "skipped (no-reconnect.txt): Windows may show Code 12"
+    if (root / NONREC).exists():
+        return "non-recursive (tx-reconnect-nonrecursive.txt, v2.1.6+)"
+    return "auto"
+
+
 def build(src, letter, unlock=False, root_override=None):
     """Copy, verify and record. root_override is for tests (a temp dir)."""
     plan = check_source(src)
@@ -215,6 +233,11 @@ def set_mode(root, mode):
         armed = root / ARMED
         if armed.exists():
             armed.replace(root / (ARMED + ".off"))
+    elif mode == "reconnect-safe":
+        (root / NONREC).write_text("adakit: force the non-recursive reconnect (nv-uefi-unlocker v2.1.6+)\n")
+    elif mode == "reconnect-auto":
+        if (root / NONREC).exists():
+            (root / NONREC).replace(root / (NONREC + ".off"))
     return stick_mode(root)
 
 
@@ -313,7 +336,11 @@ def last_run(root):
     text = log.read_text(encoding="utf-8", errors="replace")
     ver = re.search(r"nv-uefi-unlocker (v[\w.+-]+)(?: \(built ([^)]+)\))?", text)
     hand = re.search(r"HANDOFF-OUT: ss0=(0x[0-9a-f]+) ss1=(0x[0-9a-f]+)", text)
+    # The log is flushed per line, so a firmware deadlock inside the
+    # recursive reconnect leaves "begin" as the last RECONNECT line.
+    rec = re.findall(r"RECONNECT: ConnectController (?:\(recursive=(\w+)\) (begin)|ok)", text)
     return {
+        "hung_at_reconnect": bool(rec) and rec[-1] == ("true", "begin") and "CHAIN: LoadImage" not in text,
         "time": log.stat().st_mtime,
         "version": ver.group(1) if ver else None,
         "built": ver.group(2) if ver and ver.group(2) else None,
