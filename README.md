@@ -13,6 +13,7 @@ The kit doesn't unlock anything itself and ships no firmware. It helps you:
 | `status` | Did this boot come from the stick? Last loader run and version, boot-order warning | No |
 | `mode F: …` | Switches the stick between `replay` and `unlock`, shows `status`, `disarm`s auto-run, or turns on `reconnect-safe` for boards that hang after the unlock (`reconnect-auto` turns it off) | The USB stick only |
 | `verify` | 10-second benchmark: is FP32-accumulate tensor math at full rate right now? | No |
+| `tune` | TFLOPS and watts at each GPU clock cap, to find where the power limit starts costing speed; needs an elevated terminal | GPU clock cap while it runs, reset when it ends |
 | `bench <label>` | The matched benchmark set used in community reports | `results\` |
 | `report a.json b.json` | Stock vs unlocked table, per-GHz numbers, chart PNG, fairness checks, and a tracker entry | `results\report\` |
 

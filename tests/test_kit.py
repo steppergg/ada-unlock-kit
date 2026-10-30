@@ -148,6 +148,15 @@ class Verdict(unittest.TestCase):
         self.assertEqual(bench.deciding_efficiency({"efficiency": 0.48, "mma": {"error": "no NVRTC"}}), 0.48)
         self.assertEqual(bench.deciding_efficiency({"efficiency": 0.48, "mma": None}), 0.48)
 
+    def test_tune_picks_efficient_cap_within_three_percent(self):
+        from adakit import tune
+        rows = [{"cap": 2400, "tflops": 70.0, "watts": 130.0}, {"cap": 2700, "tflops": 77.0, "watts": 170.0},
+                {"cap": 2850, "tflops": 78.0, "watts": 182.0}, {"cap": 2550, "tflops": 76.0, "watts": 150.0}]
+        fastest, eff = tune.pick(rows)
+        self.assertEqual(fastest["cap"], 2850)
+        self.assertEqual(eff["cap"], 2550)   # 2400 is faster per watt but 10% slower
+        self.assertEqual(tune.caps(2850)[-1], 2850)
+
     def test_mma_flop_count(self):
         from adakit import mma
         # one m16n8k16 is 16*8*16 multiply-adds = 4096 flops, per warp

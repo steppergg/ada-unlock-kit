@@ -6,6 +6,7 @@
   python -m adakit mode F: unlock|replay|disarm|status|reconnect-safe|reconnect-auto
   python -m adakit verify                     am I unlocked right now?
   python -m adakit bench stock                matched benchmark, saved to results/
+  python -m adakit tune                       TFLOPS and watts per clock cap (elevated)
   python -m adakit report results/result-stock.json results/result-unlocked.json
 """
 
@@ -15,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import bench, check, report, stick, winsys
+from . import bench, check, report, stick, tune, winsys
 
 RESULTS = Path.cwd() / "results"
 
@@ -193,6 +194,23 @@ def cmd_report(a):
     return 0
 
 
+def cmd_tune(a):
+    import ctypes
+    if not ctypes.windll.shell32.IsUserAnAdmin():
+        print("[STOP] tune locks GPU clocks with nvidia-smi, which needs an elevated terminal (Run as administrator).", file=sys.stderr)
+        return 1
+    print(f"FP16 GEMM {tune.N} at each clock cap; clocks are reset when this ends.")
+    rows = tune.tune()
+    fastest, eff = tune.pick(rows)
+    print(f"Fastest: cap {fastest['cap']} MHz, {fastest['tflops']} TFLOPS at {fastest['watts']:.0f} W")
+    print(f"Efficient: cap {eff['cap']} MHz, {eff['tflops']} TFLOPS at {eff['watts']:.0f} W "
+          f"({eff['tflops'] / fastest['tflops']:.0%} of the speed for {eff['watts'] / fastest['watts']:.0%} of the power)")
+    print("To keep it: nvidia-smi -lgc 210,<cap> (lasts until reboot), or set that clock as the top of an Afterburner V/F curve.")
+    if a.json:
+        Path(a.json).write_text(json.dumps(rows, indent=2))
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="adakit", description="Windows helper for nv-uefi-unlocker (RTX 40 and 30 series).")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -214,6 +232,8 @@ def main(argv=None):
     b = sub.add_parser("bench", help="matched benchmark set")
     b.add_argument("label", help="e.g. stock or unlocked")
     b.add_argument("--out", default=str(RESULTS))
+    t = sub.add_parser("tune", help="TFLOPS and watts at each clock cap (needs an elevated terminal)")
+    t.add_argument("--json", help="also save the rows to this file")
     r = sub.add_parser("report", help="compare two bench results")
     r.add_argument("stock")
     r.add_argument("unlocked")
@@ -222,7 +242,7 @@ def main(argv=None):
     a = p.parse_args(argv)
     try:
         return {"check": cmd_check, "stick": cmd_stick, "mode": cmd_mode, "status": cmd_status, "verify": cmd_verify,
-                "bench": cmd_bench, "report": cmd_report}[a.cmd](a)
+                "bench": cmd_bench, "report": cmd_report, "tune": cmd_tune}[a.cmd](a)
     except stick.StickError as e:
         print(f"[STOP] {e}", file=sys.stderr)
         return 1
