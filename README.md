@@ -77,7 +77,7 @@ Per clock the unlock is close to 2×. The absolute gain is smaller because the u
 
 ## How `verify` decides
 
-It times an FP16 GEMM with FP32 accumulate while sampling the SM clock under load, then divides by the card's full-rate peak at that clock: SMs × clock × 1024 flops (the same for Ada and Ampere, per NVIDIA's whitepapers). A stock card reads about 0.5 and an unlocked card 0.8 to 1.0 (lower end when it hits its power limit), whatever the clock. Measured on a 4060 Ti 8 GB: 0.48 stock, 0.83 unlocked at the power limit. It loads no kernel driver and needs no admin rights. For a register-level answer, upstream's `ssdiag` reads the selectors directly (it loads a signed kernel driver for the duration of the run).
+It times an FP16 GEMM with FP32 accumulate while sampling the SM clock under load, then divides by the card's full-rate peak at that clock: SMs × clock × 1024 flops (the same for Ada and Ampere, per NVIDIA's whitepapers). A stock card reads about 0.5 and an unlocked card 0.8 to 1.0 (lower end when it hits its power limit), whatever the clock. Measured on a 4060 Ti 8 GB: 0.48 stock, 0.83 unlocked at the power limit. It then runs a second check: a loop of raw `mma.sync` tensor-core instructions that touches no memory, compiled on the spot with the NVRTC inside PyTorch. It isn't held back by the power limit or by cuBLAS tile choices, so it reads about 0.5 stock and about 1.0 unlocked (4060 Ti at the power limit: GEMM 0.93, loop 0.99), and it decides the verdict when it runs. If NVRTC is missing, `verify` falls back to the GEMM alone. It loads no kernel driver and needs no admin rights. For a register-level answer, upstream's `ssdiag` reads the selectors directly (it loads a signed kernel driver for the duration of the run).
 
 ## Safety
 

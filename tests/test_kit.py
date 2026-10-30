@@ -41,6 +41,19 @@ class Security(unittest.TestCase):
             self.assertNotIn("<", inner)
             self.assertEqual(json.loads(inner)["entries"][0]["card"], row["card"])
 
+    def test_tracker_refs_cover_all_three_upstreams(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("tbuild", "tracker/build.py")
+        tb = importlib.util.module_from_spec(spec); spec.loader.exec_module(tb)
+        row = {k: None for k in tb.FIELDS}
+        for ref in ("ada#82", "nvuefi#13", "win#154"):
+            tb.validate({"entries": [dict(row, refs=[ref])]})
+        with self.assertRaises(SystemExit):
+            tb.validate({"entries": [dict(row, refs=["other#1"])]})
+        tpl = Path("tracker/template.html").read_text(encoding="utf-8")
+        for repo in compat.DATA["sources"]:
+            self.assertIn(f"{repo}: ", tpl)
+
 
 class Pnp(unittest.TestCase):
     def test_subsystem_order(self):
@@ -127,6 +140,18 @@ class Verdict(unittest.TestCase):
         row = {"median": 40.6, "clock_mhz": 1725}
         self.assertEqual(bench.state_of(row, 46, (8, 6))[1], "stock")
         self.assertEqual(bench.state_of(dict(row, median=78.0), 46, (8, 6))[1], "unlocked")
+
+    def test_mma_loop_decides_when_it_ran(self):
+        # 4060 Ti unlocked at the power limit, 2026-10-30: GEMM 0.93, loop 0.99
+        r = {"efficiency": 0.65, "mma": {"efficiency": 0.99}}
+        self.assertEqual(bench.verdict(bench.deciding_efficiency(r))[0], "unlocked")
+        self.assertEqual(bench.deciding_efficiency({"efficiency": 0.48, "mma": {"error": "no NVRTC"}}), 0.48)
+        self.assertEqual(bench.deciding_efficiency({"efficiency": 0.48, "mma": None}), 0.48)
+
+    def test_mma_flop_count(self):
+        from adakit import mma
+        # one m16n8k16 is 16*8*16 multiply-adds = 4096 flops, per warp
+        self.assertEqual(mma.flops(1, 1), mma.WARPS_PER_BLOCK * mma.CHAINS * 4096)
 
 
 class Stick(unittest.TestCase):

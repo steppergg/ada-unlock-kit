@@ -160,7 +160,7 @@ footer { color: var(--muted); font-size: 0.84rem; border-top: 1px solid var(--li
 (function () {
   "use strict";
   var DATA = JSON.parse(document.getElementById("data").textContent);
-  var SOURCES = { ada: "https://github.com/JustAResearcher/gpu-unlock-ada/issues/", nvuefi: "https://github.com/physicsdolphin/nv-uefi-unlocker/issues/" };
+  var SOURCES = { ada: "https://github.com/JustAResearcher/gpu-unlock-ada/issues/", nvuefi: "https://github.com/physicsdolphin/nv-uefi-unlocker/issues/", win: "https://github.com/impacifist/Windows-GPU-UNLOCK/issues/" };
   var ISSUE_REPO = "https://github.com/steppergg/ada-unlock-kit/issues/new";
   var state = { q: "", tool: "all", form: "all" };
 
@@ -213,7 +213,7 @@ footer { color: var(--muted); font-size: 0.84rem; border-top: 1px solid var(--li
       var n = el("td", "notecol"); n.appendChild(el("p", "notes", r.notes));
       var refs = el("span", "refs");
       r.refs.forEach(function (ref, i) {
-        var parts = ref.split("#"); var a = el("a", null, (parts[0] === "ada" ? "gpu-unlock-ada #" : "nv-uefi-unlocker #") + parts[1]);
+        var parts = ref.split("#"); var a = el("a", null, ({ ada: "gpu-unlock-ada #", nvuefi: "nv-uefi-unlocker #", win: "Windows-GPU-UNLOCK #" })[parts[0]] + parts[1]);
         a.href = SOURCES[parts[0]] + parts[1]; a.target = "_blank"; a.rel = "noopener";
         if (i) refs.appendChild(document.createTextNode("  ")); refs.appendChild(a);
       });

@@ -43,7 +43,7 @@ def assess(facts):
     if facts["fast_startup"]:
         sysf.append((WARN, "Fast Startup is on. Turn it off: a shutdown must be a real power-off for a cold boot."))
     if facts["laptop"]:
-        sysf.append((WARN, "This looks like a laptop. Reported laptop successes ran with the dGPU in MUX / dGPU-only mode; hybrid mode can lose the unlock."))
+        sysf.append((WARN, "This looks like a laptop. Reported laptop successes ran with the dGPU in MUX / dGPU-only mode; hybrid mode can lose the unlock. On MUXless laptops Windows idle power-down (RTD3) drops it; keep a CUDA process running (win #154)."))
     if facts["other_gpus"] and facts["nvidia_gpus"]:
         sysf.append((INFO, "Other display adapters: " + ", ".join(facts["other_gpus"]) + "."))
     sysf.append((INFO, "The unlock is volatile: it lasts until the next restart or power-off, so the stick runs on every boot."))

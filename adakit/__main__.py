@@ -156,6 +156,14 @@ def cmd_verify(a):
     if r["efficiency"] is not None:
         print(f"FP16 GEMM, FP32 accumulate: {r['fp16_fp32acc_tflops']} TFLOPS of {r['full_rate_peak_tflops']} full-rate peak at this clock "
               f"= {r['efficiency']:.2f} (stock is about 0.5)")
+    m = r["mma"] or {}
+    if "efficiency" in m:
+        print(f"mma.sync loop (tensor cores only, no memory): {m['tflops']} TFLOPS at {m['clock_mhz']:.0f} MHz "
+              f"= {m['efficiency']:.2f} of full rate (stock is about 0.5)")
+        if r["efficiency"] is not None and bench.verdict(r["efficiency"])[0] != r["state"]:
+            print("The GEMM and the mma loop disagree; the loop decides. A low GEMM with a full-rate loop usually means a power or memory limit, not a lost unlock.")
+    elif "error" in m:
+        print(f"mma.sync loop skipped ({m['error']}); the verdict uses the GEMM alone.")
     print(f"{r['state'].upper()}: {r['text']}")
     return 0 if r["state"] == "unlocked" else 2
 

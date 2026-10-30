@@ -21,7 +21,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from . import sysbin
+from . import mma, sysbin
 
 FLOPS_PER_SM_CLK = {(8, 9): 1024, (8, 6): 1024}
 UNLOCKED_AT, STOCK_BELOW = 0.70, 0.60
@@ -122,11 +122,27 @@ def verify():
     clock, power, capped = sample_under_load(torch, op)
     peak = props.multi_processor_count * per_clk * clock * 1e6 / 1e12 if per_clk else None
     eff = tflops / peak if peak else None
-    state, text = verdict(eff)
-    return {"device": props.name, "sms": props.multi_processor_count, "cc": f"{props.major}.{props.minor}",
-            "fp16_fp32acc_tflops": round(tflops, 2), "clock_mhz": clock, "power_w": power, "power_capped": capped,
-            "full_rate_peak_tflops": round(peak, 2) if peak else None,
-            "efficiency": round(eff, 3) if eff else None, "state": state, "text": text}
+    r = {"device": props.name, "sms": props.multi_processor_count, "cc": f"{props.major}.{props.minor}",
+         "fp16_fp32acc_tflops": round(tflops, 2), "clock_mhz": clock, "power_w": power, "power_capped": capped,
+         "full_rate_peak_tflops": round(peak, 2) if peak else None,
+         "efficiency": round(eff, 3) if eff else None, "mma": None}
+    if per_clk:
+        try:
+            mma_tflops, mma_op = mma.measure(torch)
+            mclock, _, _ = sample_under_load(torch, mma_op)
+            mpeak = props.multi_processor_count * per_clk * mclock * 1e6 / 1e12
+            r["mma"] = {"tflops": round(mma_tflops, 2), "clock_mhz": mclock, "efficiency": round(mma_tflops / mpeak, 3)}
+        except (OSError, RuntimeError) as e:  # no NVRTC / driver JIT: fall back to the GEMM alone
+            r["mma"] = {"error": str(e)}
+    r["state"], r["text"] = verdict(deciding_efficiency(r))
+    return r
+
+
+def deciding_efficiency(r):
+    """The mma.sync loop reads the gate without memory or power-limit effects,
+    so it decides when it ran; otherwise the GEMM does."""
+    m = r.get("mma") or {}
+    return m.get("efficiency", r["efficiency"])
 
 
 CASES = [("FP32 (control)", 4096, "fp32", False), ("TF32", 4096, "fp32", True),

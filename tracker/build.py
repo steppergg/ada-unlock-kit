@@ -35,8 +35,8 @@ def validate(data):
             raise SystemExit(f"entry {i} ({row.get('card')}) is missing {missing}")
         for ref in row["refs"]:
             repo, _, num = ref.partition("#")
-            if repo not in ("ada", "nvuefi") or not num.isdigit():
-                raise SystemExit(f"entry {i}: bad ref {ref!r} (use ada#82 or nvuefi#13)")
+            if repo not in ("ada", "nvuefi", "win") or not num.isdigit():
+                raise SystemExit(f"entry {i}: bad ref {ref!r} (use ada#82, nvuefi#13 or win#154)")
 
 
 def main():
