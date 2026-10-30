@@ -372,6 +372,32 @@ class Report(unittest.TestCase):
         self.assertTrue(any("Power limit" in n for n in notes))
         self.assertTrue(any("FP32 control" in n for n in notes))
 
+    def test_power_cap_and_fp8_bf16_out(self):
+        sr, ur = result("stock", 46.7), result("unlocked", 81.0)
+        sr["rows"].append({"case": "FP8 e4m3 bf16-out", "n": 8192, "pass": 1, "median": 93.0, "clock_mhz": 2805.0, "tflops_per_ghz": 33.2})
+        ur["rows"].append({"case": "FP8 e4m3 bf16-out", "n": 8192, "pass": 1, "median": 150.0, "clock_mhz": 2400.0,
+                           "tflops_per_ghz": 62.5, "power_capped": True})
+        sb = {(r["case"], r["n"]): r for r in sr["rows"]}
+        ub = {(r["case"], r["n"]): r for r in ur["rows"]}
+        self.assertIn(("FP8 e4m3 bf16-out", 8192), [(r["case"], r["n"]) for r in report.table(sb, ub)])
+        notes = report.fairness(sr, ur, sb, ub)
+        self.assertTrue(any("power limit on FP8 e4m3 bf16-out 8192" in n for n in notes))
+
+    def test_marker_on_old_loader_warned(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = Path(d)
+            efi = root / stick.EFI_REL
+            efi.parent.mkdir(parents=True)
+            efi.write_bytes(b"own build")
+            self.assertFalse(stick.marker_ignored(root, "v2.1.5"))  # no marker, nothing to warn about
+            (root / stick.NONREC).write_text("x")
+            self.assertTrue(stick.marker_ignored(root, "v2.1.5"))
+            self.assertFalse(stick.marker_ignored(root, "v2.1.6"))
+            self.assertFalse(stick.marker_ignored(root, None))  # unknown: don't guess
+            with mock.patch.dict(stick.KNOWN_LOADERS, {stick.sha256(efi): "nv-uefi-unlocker v0.2.0 release"}):
+                self.assertTrue(stick.marker_ignored(root, "v2.1.6"))  # the binary on the stick wins over an old log
+        self.assertEqual(stick.version_tuple("nv-uefi-unlocker v2.1.6-diag.1 release"), (2, 1, 6))
+
 
 if __name__ == "__main__":
     unittest.main()

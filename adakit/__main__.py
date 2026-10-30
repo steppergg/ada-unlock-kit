@@ -3,7 +3,7 @@
   python -m adakit check                      is this PC a candidate? (read-only)
   python -m adakit stick F: --source usbroot  copy a verified stick (replay mode)
   python -m adakit status [F:]                did this boot come from the stick? last loader run
-  python -m adakit mode F: unlock|replay|disarm|status
+  python -m adakit mode F: unlock|replay|disarm|status|reconnect-safe|reconnect-auto
   python -m adakit verify                     am I unlocked right now?
   python -m adakit bench stock                matched benchmark, saved to results/
   python -m adakit report results/result-stock.json results/result-unlocked.json
@@ -71,6 +71,9 @@ def cmd_mode(a):
         return show_status(letter)
     mode, armed = stick.set_mode(root, a.mode)
     print(f"{letter} mode: {mode}{' | ARMED: auto-runs after 5 s' if armed else ''} | reconnect: {stick.reconnect_mode(root)}")
+    run = stick.last_run(root)
+    if stick.marker_ignored(root, run["version"] if run else None):
+        print("  [warn] This loader is older than v2.1.6 and ignores the reconnect-safe marker. Put the v2.1.6 release on the stick.")
     return 0
 
 
@@ -106,6 +109,8 @@ def show_status(letter=None):
     print((f"Loader     BOOTX64.EFI sha256 {lh[:16]}..." + (f" = official {known}" if known else " (own build or unknown)"))
           if lh else r"Loader     no \EFI\BOOT\BOOTX64.EFI")
     print(f"Reconnect  {stick.reconnect_mode(root)}")
+    if stick.marker_ignored(root, run["version"] if run else None):
+        print("  [warn] This loader is older than v2.1.6 and ignores tx-reconnect-nonrecursive.txt. Put the v2.1.6 release on the stick.")
     if run:
         if run["aborted"]:
             what = "aborted at the confirm screen, nothing unlocked"
@@ -193,7 +198,7 @@ def main(argv=None):
     s.add_argument("--other-pc", action="store_true", help="skip the RTX 40 check (stick for a different PC)")
     st = sub.add_parser("status", help="did this boot come from the stick? last loader run, boot order")
     st.add_argument("drive", nargs="?")
-    m = sub.add_parser("mode", help="switch a kit stick between replay and unlock; reconnect-safe for boards that hang after FLR")
+    m = sub.add_parser("mode", help="switch a kit stick between replay and unlock; reconnect-safe for boards that hang after the unlock")
     m.add_argument("drive")
     m.add_argument("mode", choices=["status", "replay", "unlock", "disarm", "reconnect-safe", "reconnect-auto"])
     v = sub.add_parser("verify", help="benchmark check: is FP32-accumulate at full rate?")

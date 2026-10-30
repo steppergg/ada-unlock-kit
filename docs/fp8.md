@@ -1,6 +1,6 @@
 # FP8 on an unlocked card
 
-Measured on an RTX 4060 Ti 8 GB (AD106, 128-bit bus), ASUS Z790, PyTorch `torch._scaled_mm` (e4m3 inputs), both states at the same locked clock (`nvidia-smi -lgc 2100`, no power cap in either run), so the ratio is the unlock alone.
+Measured on an RTX 4060 Ti 8 GB (AD106, 128-bit bus), ASUS Z790, PyTorch `torch._scaled_mm` (e4m3 inputs), both states at the same locked clock (`nvidia-smi -lgc 2100`, no power cap in either run), so the ratio is the unlock alone. Unlocked runs 2026-10-28, stock runs 2026-10-30, same driver and PyTorch.
 
 | FP8 GEMM | Stock TFLOPS | Unlocked TFLOPS | Gain |
 |---|---:|---:|---:|
@@ -8,9 +8,9 @@ Measured on an RTX 4060 Ti 8 GB (AD106, 128-bit bus), ASUS Z790, PyTorch `torch.
 | 8192, BF16 output | 70.4 | 133.4 | 1.89× |
 | 16384, FP32 output | 71.0 | 132.1 | 1.86× |
 | 16384, BF16 output | 70.9 | 136.3 | **1.92×** |
-| FP16 8192 (reference) | 36.0 | 70.7 | 1.97× |
+| FP16 8192 (reference) | 36.0 | 70.7 | 1.96× |
 
-Stock is half rate whatever the output type. Unlocked, the tensor cores run twice as fast and the output writes start to show: an FP32 result matrix is twice the bytes of a BF16 one, and on a 128-bit bus that traffic is no longer hidden. Numerical results are unchanged (max relative error vs FP64 about 2e-4 in both states).
+Stock is half rate whatever the output type. Unlocked, the tensor cores run twice as fast and the output writes start to show: an FP32 result matrix is twice the bytes of a BF16 one, and on a 128-bit bus that traffic is no longer hidden. The results stay correct: unlocked, the FP8 max relative error vs FP64 on the same quantised inputs is about 2e-4, the same order as FP16.
 
 ## Getting the most out of it
 

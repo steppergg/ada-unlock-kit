@@ -48,10 +48,38 @@ MANIFEST = "ADAKIT-MANIFEST.json"
 # NORECONNECT wins over it and skips the reconnect (Code 12 risk, #35/#61).
 NONREC = "tx-reconnect-nonrecursive.txt"
 NORECONNECT = "no-reconnect.txt"
-# Official upstream release binaries, so `stick` and `status` can name them.
+# Official upstream release binaries (BOOTX64.EFI release assets), so `stick`
+# and `status` can name them. v2.1.5 and v2.1.0 shipped it only inside a zip.
 KNOWN_LOADERS = {
     "aa0c11485c152a6dc7b76a0f300e51e19e2942d22e5716ae6a79d0fe0a3612d7": "nv-uefi-unlocker v2.1.6 release",
+    "96e0133fd3f7cf663e6b982088747037d3f024fee295bc579948db77b715330c": "nv-uefi-unlocker v2.1.7-tu102-diag release",
+    "dbc8c1d4019ceaf3f995391d44e16d0dfd901fc18b4a64da4bf29cb96337460f": "nv-uefi-unlocker v2.1.6-diag.1 release",
+    "efe84ba356ec196f62f10ea98b0c289fafe264af4288513d9c3f0fd6a4b071ea": "nv-uefi-unlocker v2.1.4 release",
+    "68def58649f2edbbba9c891baedf464b7b71a17d3ede9bfdea2100555b835794": "nv-uefi-unlocker v2.1.3 release",
+    "2c5061a84356ea7e8f6c9566497f3589b6e81842fa107ad409e2c06a28b05428": "nv-uefi-unlocker v2.1.2 release",
+    "e20a5cf1991972505b61c1a334fe2af66d9395774e62ebb299a48ba45a6b147b": "nv-uefi-unlocker v2.1.1 release",
+    "6788aa5a799f8c931714aecd3e86e93a8e33525059edf82cdde00f603e99a321": "nv-uefi-unlocker v0.2.0 release",
+    "50b0a4609fd6638ff8d19363ffee963e8d1b30bfcdcafbdd321363c4f37bb5ac": "nv-uefi-unlocker v0.1.4 release",
+    "1320e6478a522478a96a6f4037f70f1db44484a5327993ed2362aad4c894e010": "nv-uefi-unlocker v0.1.3 release",
+    "151875da2c523c2dda95852fe2de12f8b5e3d00c5106f0ee0d1e0a026fcaae5b": "nv-uefi-unlocker v0.1.2 release",
+    "d5ca1afd20d0a34a0ad7d6a815873e053fb5efeb671a2a0b1fa0e4b846a2aa9a": "nv-uefi-unlocker v0.1.1 release",
 }
+NONREC_SINCE = (2, 1, 6)
+
+
+def version_tuple(text):
+    """(2, 1, 6) from 'v2.1.6', 'nv-uefi-unlocker v2.1.6-diag.1 release'; None if absent."""
+    m = re.search(r"v(\d+)\.(\d+)\.(\d+)", text or "")
+    return tuple(int(x) for x in m.groups()) if m else None
+
+
+def marker_ignored(root, log_version=None):
+    """True when the reconnect-safe marker is on a stick whose loader is
+    known to predate it (it would be silently ignored)."""
+    if not (Path(root) / NONREC).exists():
+        return False
+    v = version_tuple(KNOWN_LOADERS.get(loader_hash(root) or "")) or version_tuple(log_version)
+    return v is not None and v < NONREC_SINCE
 
 
 class StickError(Exception):

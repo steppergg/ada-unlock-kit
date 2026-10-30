@@ -13,7 +13,8 @@ from pathlib import Path
 
 from . import sysbin
 
-CASES = [("FP16", 8192), ("BF16", 8192), ("FP8 e4m3", 8192), ("TF32", 4096), ("FP32 (control)", 4096)]
+CASES = [("FP16", 8192), ("BF16", 8192), ("FP8 e4m3", 8192), ("FP8 e4m3 bf16-out", 8192), ("TF32", 4096),
+         ("FP32 (control)", 4096)]
 
 
 def pct(gain):
@@ -45,6 +46,10 @@ def fairness(stock, unlocked, sb, ub):
         if got and got != want:
             notes.append(f"The run labelled {want} measured as {got} (FP16 efficiency {run.get('efficiency')}). "
                          "Check which boot each run came from before posting.")
+    capped = [f"{k[0]} {k[1]}" for k in CASES if k in ub and ub[k].get("power_capped")]
+    if capped:
+        notes.append(f"The unlocked run hit the power limit on {', '.join(capped)}: those gains are power-bound. "
+                     "The per-GHz column shows the unlock itself.")
     ctl = ("FP32 (control)", 4096)
     if ctl in sb and ctl in ub:
         drift = ub[ctl]["median"] / sb[ctl]["median"] - 1
