@@ -68,12 +68,15 @@ def smi(query, target=()):
 
 def make_op(torch, n, dtype, tf32=False):
     torch.backends.cuda.matmul.allow_tf32 = tf32
-    if dtype == "fp8":
+    if dtype in ("fp8", "fp8-bf16"):
+        # FP8 with BF16 output writes half the bytes of FP32 output; on narrow
+        # buses (128-bit 4060 Ti) that write traffic shows up at full rate.
+        out = torch.bfloat16 if dtype == "fp8-bf16" else torch.float32
         f8 = torch.float8_e4m3fn
         a = torch.randn(n, n, device="cuda").to(f8)
         b = torch.randn(n, n, device="cuda").to(f8).t()
         one = torch.tensor(1.0, device="cuda")
-        return lambda: torch._scaled_mm(a, b, scale_a=one, scale_b=one, out_dtype=torch.float32)
+        return lambda: torch._scaled_mm(a, b, scale_a=one, scale_b=one, out_dtype=out)
     a = torch.randn(n, n, device="cuda", dtype=dtype)
     b = torch.randn(n, n, device="cuda", dtype=dtype)
     return lambda: torch.mm(a, b)
@@ -128,7 +131,8 @@ def verify():
 
 CASES = [("FP32 (control)", 4096, "fp32", False), ("TF32", 4096, "fp32", True),
          ("FP16", 4096, "fp16", False), ("FP16", 8192, "fp16", False),
-         ("BF16", 4096, "bf16", False), ("BF16", 8192, "bf16", False), ("FP8 e4m3", 8192, "fp8", False)]
+         ("BF16", 4096, "bf16", False), ("BF16", 8192, "bf16", False), ("FP8 e4m3", 8192, "fp8", False),
+         ("FP8 e4m3 bf16-out", 8192, "fp8-bf16", False)]
 
 
 def has_fp8(torch):
@@ -169,8 +173,8 @@ def bench(label, out_dir, passes=2, log=print):
     props = torch.cuda.get_device_properties(0)
     cc = (props.major, props.minor)
     target = smi_target(torch)
-    cases = [c for c in CASES if c[2] != "fp8" or has_fp8(torch)]
-    dtypes = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16, "fp8": "fp8"}
+    cases = [c for c in CASES if not c[2].startswith("fp8") or has_fp8(torch)]
+    dtypes = {"fp32": torch.float32, "fp16": torch.float16, "bf16": torch.bfloat16, "fp8": "fp8", "fp8-bf16": "fp8-bf16"}
     result = {"label": label, "time": time.strftime("%Y-%m-%d %H:%M:%S"), "torch": torch.__version__,
               "cuda": torch.version.cuda, "device": torch.cuda.get_device_name(0), "driver": smi("driver_version", target),
               "power_limit_w": smi("power.limit", target), "sms": props.multi_processor_count,

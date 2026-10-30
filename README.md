@@ -88,7 +88,7 @@ It times an FP16 GEMM with FP32 accumulate while sampling the SM clock under loa
 - New sticks start in replay mode: the payload is stored as `.off`, so the loader runs the signed firmware transaction without writing the unlock.
 - The kit never creates the auto-run marker (`i_know_what_i_am_doing.txt`). `mode F: disarm` renames it if present.
 - The unlock leaves some GPU firmware protections open until the next power-off. Don't use it on a shared or multi-tenant machine.
-- It changes AI compute speed only. Games and DLSS don't change.
+- It changes AI compute speed only. Games and DLSS don't change. For FP8 tips (BF16 output, sizes, power) see [docs/fp8.md](docs/fp8.md).
 
 ## Tests
 
